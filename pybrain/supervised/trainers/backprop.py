@@ -1,6 +1,6 @@
 __author__ = 'Daan Wierstra and Tom Schaul'
 
-from scipy import dot, argmax
+from scipy import dot, argmax, zeros
 from random import shuffle
 
 from trainer import Trainer
@@ -87,7 +87,12 @@ class BackpropTrainer(Trainer):
             # need to make a distinction here between datasets containing
             # importance, and others
             target = sample[1]
-            outerr = target - self.module.outputbuffer[offset]
+            
+            # use error due to target value only for the last sample of the sequence
+            if offset == 1:
+                outerr = target - self.module.outputbuffer[offset]
+            else:
+                outerr = zeros(target.shape)
             if len(sample) > 2:
                 importance = sample[2]
                 error += 0.5 * dot(importance, outerr ** 2)
