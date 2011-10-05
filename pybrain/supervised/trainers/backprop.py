@@ -87,12 +87,7 @@ class BackpropTrainer(Trainer):
             # need to make a distinction here between datasets containing
             # importance, and others
             target = sample[1]
-            
-            # use error due to target value only for the last sample of the sequence
-            if offset == 1:
-                outerr = target - self.module.outputbuffer[offset]
-            else:
-                outerr = zeros(target.shape)
+            outerr = target - self.module.outputbuffer[offset]
             if len(sample) > 2:
                 importance = sample[2]
                 error += 0.5 * dot(importance, outerr ** 2)
