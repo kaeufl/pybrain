@@ -11,6 +11,12 @@ class SequenceTrainer(RPropMinusTrainer):
     """SequenceTrainer that uses only the last target value of each sequence for error 
     calculation."""
     
+    def __init__(self, module, etaminus=0.5, etaplus=1.2, deltamin=1.0e-6, deltamax=5.0, delta0=0.1, **kwargs):
+        self.sequential_target = kwargs['sequential_target']
+        del(kwargs['sequential_target'])
+        RPropMinusTrainer.__init__(self, module, etaminus, etaplus, deltamin, deltamax, delta0, **kwargs)
+        
+    
     def _calcDerivs(self, seq):
         """Calculate error function and backpropagate output errors to yield
         the gradient."""
@@ -24,8 +30,8 @@ class SequenceTrainer(RPropMinusTrainer):
             # importance, and others
             target = sample[1]
             
-            # use error due to target value only for the last sample of the sequence
-            if offset == 1:
+            # if sequenital_target is set, use error due to target value only for the last sample of the sequence
+            if offset == 1 or self.sequential_target:
                 outerr = target - self.module.outputbuffer[offset]
             else:
                 outerr = zeros(target.shape)
