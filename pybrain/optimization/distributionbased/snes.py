@@ -56,11 +56,8 @@ class SNES(DistributionBasedOptimizer):
     
     @property
     def _population(self):
-        if self._wasUnwrapped:
-            return [self._allEvaluated[i].params for i in self._pointers]
-        else:
-            return [self._allEvaluated[i] for i in self._pointers]
-            
+        return [self._allEvaluated[i] for i in self._pointers]
+        
     @property
     def _currentEvaluations(self):        
         fits = [self._allEvaluations[i] for i in self._pointers]

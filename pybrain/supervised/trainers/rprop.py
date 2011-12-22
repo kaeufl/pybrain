@@ -43,8 +43,9 @@ class RPropMinusTrainer(BackpropTrainer):
             errors += e
             ponderation += p
         if self.verbose:
-            print "epoch %6d  total error %12.5g   avg weight  %12.5g" % (self.epoch, errors / ponderation,
-                                                                          sqrt((self.module.params ** 2).mean()))
+            print "epoch %6d  total error %12.5g   avg weight  %12.5g   avg step size  %12.5g" % (self.epoch, errors / ponderation,
+                                                                          sqrt((self.module.params ** 2).mean()),
+                                                                          self.descent.rprop_theta.mean())
         self.module._setParameters(self.descent(self.module.derivs - self.weightdecay * self.module.params))
         self.epoch += 1
         self.totalepochs += 1

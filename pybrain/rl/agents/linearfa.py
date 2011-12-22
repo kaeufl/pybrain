@@ -68,7 +68,7 @@ class LinearFA_Agent(LoggingAgent):
         else:
             self._temperature *= self.temperature_decay
             self._expl_proportion *= self.exploration_decay      
-            self.learner.newEpisode()
+            self.learner._decayLearningRate()
 
             
     def learn(self):
