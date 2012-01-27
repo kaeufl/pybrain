@@ -73,6 +73,6 @@ class BFGSTrainer(Trainer):
         
         self.epoch += 1
         self.totalepochs += 1
-        return errors
+        return self._last_err
 
     
