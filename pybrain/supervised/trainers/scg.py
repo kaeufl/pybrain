@@ -33,6 +33,7 @@ class SCGTrainer(Trainer):
         trainer.module._setParameters(params)
         error = 0
         for seq in trainer.ds._provideSequences():
+            trainer.module.reset()
             for sample in seq:
                 trainer.module.activate(sample[0])
             for offset, sample in reversed(list(enumerate(seq))):
