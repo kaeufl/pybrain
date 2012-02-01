@@ -17,11 +17,6 @@ class BFGSTrainer(Trainer):
     TODO: the callback function should rather be provided to trainEpochs as an 
     argument, than being implemented here.
     """
-    
-    train_errors = []
-    test_errors = []
-    optimal_params = None
-    optimal_epoch = 0
 
     def __init__(self, module, ds_train=None, ds_test=None, gtol = 1e-05, norm = inf, 
                  verbose = False, **kwargs):
@@ -35,6 +30,10 @@ class BFGSTrainer(Trainer):
         self.verbose = verbose
         self.epoch = 0
         self.totalepochs = 0
+        self.train_errors = []
+        self.test_errors = []
+        self.optimal_params = None
+        self.optimal_epoch = 0
         
         self.module = module
 
