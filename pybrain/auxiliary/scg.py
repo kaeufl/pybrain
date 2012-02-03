@@ -4,10 +4,9 @@
   by Martin F. Moller
   Neural Networks, vol. 6, pp. 525-533, 1993
 
-  Adapted from the adaption by Chuck Anderson of the Matlab 
-  implementation by Nabney as part of the netlab library.
-
-  Call as scg()  to see example use.
+  Adapted for use with pybrain.supervised.scg.SCGTrainer from the adaption by 
+  Chuck Anderson of the Matlab implementation by Nabney as part of the netlab 
+  library.
 """
 from copy import copy
 import numpy as np

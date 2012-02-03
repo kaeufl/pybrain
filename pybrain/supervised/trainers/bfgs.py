@@ -44,14 +44,20 @@ class BFGSTrainer(Trainer):
         
         def updateStatus(params):
             test_error = self.ds_test.evaluateModuleMSE(self.module)
-            self.train_errors.append(self._last_err / self.ds.getLength())
-            self.test_errors.append(test_error)
-            if test_error <= amin(self.test_errors):
-                self.optimal_params = self.module.params
+            if self.epoch > 0 and test_error <= amin(self.test_errors):
+                print "opt weights updated"
+                print self.module.params[0]
+                self.optimal_params = self.module.params.copy()
                 self.optimal_epoch = self.epoch
             print "Epoch " + str(self.epoch) + ", E = " +\
                   str(self._last_err / self.ds.getLength())
             print "Test set error: " + str(test_error)
+            
+            if self.epoch > 0:
+                print self.optimal_params[0]
+            
+            self.train_errors.append(self._last_err / self.ds.getLength())
+            self.test_errors.append(test_error)
             self.epoch += 1
             
         def f(params):
@@ -89,7 +95,7 @@ class BFGSTrainer(Trainer):
                                maxiter = N, callback = updateStatus, 
                                disp = 0)
 
-        self.module._setParameters(new_params)
+        #self.module._setParameters(new_params)
         
         self.epoch += 1
         self.totalepochs += 1
