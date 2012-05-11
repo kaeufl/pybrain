@@ -1,7 +1,6 @@
 __author__ = 'Paul Kaeufl, kaeufl@geo.uu.nl'
 
-from scipy import inf, array, sum, finfo, ndarray
-from scipy.optimize.optimize import fmin_bfgs
+from scipy import sum, finfo
 
 from trainer import Trainer
 from pybrain.auxiliary.scg import SCG

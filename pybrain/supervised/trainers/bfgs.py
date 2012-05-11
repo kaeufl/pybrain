@@ -1,6 +1,6 @@
 __author__ = 'Paul Kaeufl, kaeufl@geo.uu.nl'
 
-from scipy import inf, sum, amin
+from scipy import inf, sum, amin, mean, absolute
 from scipy.optimize.optimize import fmin_bfgs
 
 from trainer import Trainer
@@ -47,8 +47,8 @@ class BFGSTrainer(Trainer):
             if self.epoch > 0 and test_error <= amin(self.test_errors):
                 self.optimal_params = self.module.params.copy()
                 self.optimal_epoch = self.epoch
-            print "Epoch " + str(self.epoch) + ", E = " +\
-                  str(self._last_err / self.ds.getLength())
+            print "Epoch %i, E = %g, avg weight: %g" %\
+                (self.epoch, (self._last_err / self.ds.getLength()), mean(absolute(self.module.params)))
             print "Test set error: " + str(test_error)
             
             self.train_errors.append(self._last_err / self.ds.getLength())
