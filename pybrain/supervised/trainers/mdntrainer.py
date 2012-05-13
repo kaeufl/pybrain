@@ -17,9 +17,10 @@ class MDNTrainer(SCGTrainer):
     """
 
     def __init__(self, *args, **kwargs):
+        self.M = args[0].M
+        self.c = args[0].c
         SCGTrainer.__init__(self, *args, **kwargs)
-        self.M = self.module.M
-        self.c = self.module.c
+
 
     def initNetworkWeights(self, sigma0=1.0, scaled_prior=True):
         """
@@ -71,9 +72,15 @@ class MDNTrainer(SCGTrainer):
             # only one centre: take average variance
             sigma = np.mean(np.diag([np.var(t)]))
         # set biases (adapted from netlab, mdninit.m)
+        print "Initial target value distribution"
+        print "Alpha:"
+        print alpha
+        print "Sigma:"
+        print sigma
+        print "Centers:"
+        print centroid
         conn_b_h.params[:] = np.random.normal(loc=0.0, scale = sigma1,size=conn_b_h.paramdim)
-        tmp = np.reshape([alpha, np.log(sigma), centroid], conn_b_o.params.shape)
-        conn_b_o.params[:] = tmp
+        conn_b_o.params[:] = np.reshape([alpha, np.log(sigma), centroid], conn_b_o.params.shape)
         #self.w2[0:self.M,0] = alpha
         #self.w2[self.M:2*self.M,0] = np.log(sigma)
         #self.w2[2*self.M:,0] = np.reshape(centroid, [self.M * self.c])
@@ -101,16 +108,16 @@ class MDNTrainer(SCGTrainer):
         if dataset:
             assert dataset.indim == self.module.indim
 
-    def _phi(self, T, mu, sigma, c):
+    def _phi(self, T, mu, sigma):
         # distance between target data and gaussian kernels
         dist = (T-mu)**2
-        phi = (1.0 / (2*np.pi*sigma)**(0.5*c)) * np.exp(- 1.0 * dist / (2 * sigma))
+        phi = (1.0 / (2*np.pi*sigma)**(0.5*self.c)) * np.exp(- 1.0 * dist / (2 * sigma))
         # prevent underflow
         return np.maximum(phi, np.finfo(float).eps)
 
     def mdn_err(self, y, t):
-        alpha, sigma, mu = self.module.getMixtureParams(self.module, y)
-        phi = self.module._phi(t, mu, sigma, self.module.c)
+        alpha, sigma, mu = self.getMixtureParams(y)
+        phi = self._phi(t, mu, sigma)
         tmp = np.maximum(np.sum(alpha * phi, 0), np.finfo(float).eps)
         return -np.log(tmp)
 
@@ -140,7 +147,7 @@ class MDNTrainer(SCGTrainer):
             for offset, sample in reversed(list(enumerate(seq))):
                 target = sample[1]
                 y = trainer.module.outputbuffer[offset]
-                alpha, sigma, mu = trainer.module.getMixtureParams(y)
+                alpha, sigma, mu = trainer.getMixtureParams(y)
                 phi = trainer._phi(target, mu, sigma)
                 aphi = alpha*phi
                 pi = aphi / np.sum(aphi, 0)
@@ -156,5 +163,5 @@ class MDNTrainer(SCGTrainer):
                 str(outerr) # ??? s. backprop trainer
                 trainer.module.backActivate(outerr)
         # import pdb;pdb.set_trace()
-        # self.module.derivs contains the _negative_ gradient
-        return -1 * trainer.module.derivs
+        # self.module.derivs contains the _negative_ gradient ??? no apparently not
+        return 1 * trainer.module.derivs

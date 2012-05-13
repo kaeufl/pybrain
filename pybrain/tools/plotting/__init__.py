@@ -2,3 +2,4 @@
 from multiline import MultilinePlotter
 from colormaps import ColorMap
 from fitnessprogression import plotFitnessProgession
+from mdnplot import MDNPlotter

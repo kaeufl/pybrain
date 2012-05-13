@@ -4,8 +4,8 @@
   by Martin F. Moller
   Neural Networks, vol. 6, pp. 525-533, 1993
 
-  Adapted for use with pybrain.supervised.scg.SCGTrainer from the adaption by 
-  Chuck Anderson of the Matlab implementation by Nabney as part of the netlab 
+  Adapted for use with pybrain.supervised.scg.SCGTrainer from the adaption by
+  Chuck Anderson of the Matlab implementation by Nabney as part of the netlab
   library.
 """
 from copy import copy
@@ -14,7 +14,7 @@ import sys
 from math import sqrt, ceil
 
 class SCG():
-    def __init__(self, x0, f, df, trainer, nIterations = 1000, 
+    def __init__(self, x0, f, df, trainer, nIterations = 1000,
                  xPrecision = None, fPrecision = None, evalFunc = None):
         """
         Initialize SCG with initial guess 'x0', objective function 'f(x, trainer)' and
@@ -24,7 +24,7 @@ class SCG():
         self.f = lambda x: f(x, self.trainer)
         self.gradf = lambda x: df(x, self.trainer)
         self.trainer = trainer
-        
+
         self.nIterations = nIterations
         self.xPrecision = xPrecision or 0.001 * np.mean(x0)
         self.fPrecision = fPrecision or 0.001 * np.mean(self.f(x0))
@@ -33,7 +33,7 @@ class SCG():
         self.sigma0 = 1.0e-4
         self.nvars = len(x0)
         self.evalFunc = evalFunc or (lambda x: "Eval "+str(x))
-        
+
         self.success = True        # Force calculation of directional derivs.
         self.nsuccess = 0        # nsuccess counts number of successes.
         self.beta = 1.0        # Initial scale parameter.
@@ -41,14 +41,14 @@ class SCG():
         self.betamax = 1.0e100     # Upper bound on scale.
         self.floatPrecision = sys.float_info.epsilon
         self.j = 1       # j counts number of iterations.
-        
+
         # initialize a few things
         self.fold = self.f(x0)
         self.fnow = self.fold
         self.gradnew = self.gradf(x0)
         self.gradold = copy(self.gradnew)
         self.d = -self.gradnew        # Initial search direction.
-        
+
         if self.xtracep:
             self.xtrace = np.zeros((self.nIterations+1,len(x0)))
             self.xtrace[0,:] = x0
@@ -59,12 +59,12 @@ class SCG():
             self.ftrace[0] = self.fold
         else:
             self.ftrace = None
-    
+
     def scg(self, x):
         """perform one iteration"""
         ### Main optimization loop.
         #while j <= nIterations:
-    
+
         # Calculate first and second directional derivatives.
         if self.success:
             self.mu = np.dot(self.d, self.gradnew)
@@ -88,7 +88,7 @@ class SCG():
             delta = self.beta * self.kappa
             self.beta = self.beta - self.theta/self.kappa
         alpha = -self.mu/delta
-        
+
         ## Calculate the comparison ratio.
         xnew = x + alpha * self.d
         fnew = self.f(xnew)
@@ -113,7 +113,7 @@ class SCG():
         ## Test for termination
 
         ##print(c(max(abs(alpha*d)),max(abs(fnew-fold))))
-      
+
             if max(abs(alpha*self.d)) < self.xPrecision:
                 return {'x':x, 'f':self.fnow, 'nIterations':self.j, 'xtrace':self.xtrace[:self.j,:], 'ftrace':self.ftrace[:self.j],
                         'reason':"limit on x Precision"}
@@ -138,7 +138,7 @@ class SCG():
         elif Delta > 0.75:
             self.beta = max(0.5*self.beta, self.betamin)
 
-        ## Update search direction using Polak-Ribiere formula, or re-start 
+        ## Update search direction using Polak-Ribiere formula, or re-start
         ## in direction of negative gradient after nparams steps.
         if self.nsuccess == self.nvars:
             self.d = -self.gradnew
@@ -150,10 +150,10 @@ class SCG():
             #print "end d",d
         self.j += 1
 
-        ## If we get here, then we haven't terminated in the given number of 
+        ## If we get here, then we haven't terminated in the given number of
         ## iterations.
 
         ##print("Did not converge.")
-        return {'x':x, 'f':self.fnow, 'nIterations':self.j, 
+        return {'x':x, 'f':self.fnow, 'nIterations':self.j,
                 'xtrace':self.xtrace[:self.j,:], 'ftrace':self.ftrace[:self.j],
                 'reason':"did not converge"}

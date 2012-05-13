@@ -11,8 +11,8 @@ class SCGTrainer(Trainer):
     using the scaled conjugate gradient algorithm.
     """
 
-    def __init__(self, module, dataset, totalIterations = 100, 
-                 xPrecision = finfo(float).eps, fPrecision = finfo(float).eps, 
+    def __init__(self, module, dataset, totalIterations = 100,
+                 xPrecision = finfo(float).eps, fPrecision = finfo(float).eps,
                  **kwargs):
         """Create a SCGTrainer to train the specified `module` on the
         specified `dataset`.
@@ -22,12 +22,13 @@ class SCGTrainer(Trainer):
         self.epoch = 0
         self.totalepochs = 0
         self.module = module
-        
-        self.scg = SCG(self.module.params, SCGTrainer.f, SCGTrainer.df, self, 
-                       totalIterations, xPrecision, fPrecision, 
+        #self.tmp_module = module.copy()
+
+        self.scg = SCG(self.module.params, self.f, self.df, self,
+                       totalIterations, xPrecision, fPrecision,
                        evalFunc = lambda x: str(x / self.ds.getLength()))
-     
-    @staticmethod   
+
+    @staticmethod
     def f(params, trainer):
         trainer.module._setParameters(params)
         error = 0
@@ -39,11 +40,11 @@ class SCGTrainer(Trainer):
                 target = sample[1]
                 outerr = target - trainer.module.outputbuffer[offset]
                 error += 0.5 * sum(outerr ** 2)
-                
+
         trainer._last_err = error
         return error
-    
-    @staticmethod    
+
+    @staticmethod
     def df(params, trainer):
         trainer.module._setParameters(params)
         trainer.module.resetDerivatives()
@@ -64,16 +65,15 @@ class SCGTrainer(Trainer):
         """Train the associated module for one epoch."""
         assert len(self.ds) > 0, "Dataset cannot be empty."
         self.module.resetDerivatives()
-        
+
         # run SCG for one epoch
         new_params = self.scg.scg(self.module.params)
         self.module._setParameters(new_params['x'])
-        
+
         print "Epoch " + str(self.epoch) + ", E = " +\
               str(self._last_err / self.ds.getLength()) +\
               ", beta = " + str(self.scg.beta)
-        
+
         self.epoch += 1
         self.totalepochs += 1
         return self._last_err / self.ds.getLength()
-    
