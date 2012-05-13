@@ -22,20 +22,20 @@ class MixtureDensityNetwork(FeedForwardNetwork):
         self.addConnection(FullConnection(self['bias'], self['o']))
         self.addConnection(FullConnection(self['h'], self['o']))
         self.sortModules()
-        
-    def softmax(self, x):
-        # prevent overflow
-        maxval = np.log(np.finfo(float).max) - np.log(x.shape[0])
-        x = np.minimum(maxval, x)
-        # prevent underflow
-        minval = np.finfo(float).eps
-        x = np.maximum(minval, x)
-        return np.exp(x) / np.sum(np.exp(x), axis = 0)
-    
-    def getMixtureParams(self, y):
-        alpha = np.maximum(self.softmax(y[0:self.M]), np.finfo(float).eps)
-        sigma = np.minimum(y[self.M:2*self.M], np.log(np.finfo(float).max))
-        sigma = np.exp(sigma) # sigma
-        sigma = np.maximum(sigma, np.finfo(float).eps)
-        mu = np.reshape(y[2*self.M:], [self.c, self.M])
-        return alpha, sigma, mu
+
+#    def softmax(self, x):
+#        # prevent overflow
+#        maxval = np.log(np.finfo(float).max) - np.log(x.shape[0])
+#        x = np.minimum(maxval, x)
+#        # prevent underflow
+#        minval = np.finfo(float).eps
+#        x = np.maximum(minval, x)
+#        return np.exp(x) / np.sum(np.exp(x), axis = 0)
+#
+#    def getMixtureParams(self, y):
+#        alpha = np.maximum(self.softmax(y[0:self.M]), np.finfo(float).eps)
+#        sigma = np.minimum(y[self.M:2*self.M], np.log(np.finfo(float).max))
+#        sigma = np.exp(sigma) # sigma
+#        sigma = np.maximum(sigma, np.finfo(float).eps)
+#        mu = np.reshape(y[2*self.M:], [self.c, self.M])
+#        return alpha, sigma, mu
