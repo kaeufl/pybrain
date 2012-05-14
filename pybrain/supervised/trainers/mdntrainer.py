@@ -70,7 +70,7 @@ class MDNTrainer(SCGTrainer):
             sigma = np.maximum(sigma, np.finfo(float).eps) # avoid underflow
         else:
             # only one centre: take average variance
-            sigma = np.mean(np.diag([np.var(t)]))
+            sigma = [np.mean(np.diag([np.var(t)]))]
         # set biases (adapted from netlab, mdninit.m)
         print "Initial target value distribution"
         print "Alpha:"
