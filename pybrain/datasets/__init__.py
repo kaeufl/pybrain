@@ -5,3 +5,4 @@ from unsupervised import UnsupervisedDataSet
 from importance import ImportanceDataSet
 from reinforcement import ReinforcementDataSet
 from classification import ClassificationDataSet, SequenceClassificationDataSet
+from mdn import MDNDataSet
