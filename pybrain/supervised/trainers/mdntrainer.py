@@ -80,7 +80,11 @@ class MDNTrainer(SCGTrainer):
         print "Centers:"
         print centroid
         conn_b_h.params[:] = np.random.normal(loc=0.0, scale = sigma1,size=conn_b_h.paramdim)
-        conn_b_o.params[:] = np.reshape([alpha, np.log(sigma), centroid], conn_b_o.params.shape)
+
+        #conn_b_o.params[:] = np.reshape([alpha, np.log(sigma), centroid], conn_b_o.params.shape)
+        conn_b_o.params[0:self.M] = alpha
+        conn_b_o.params[self.M:2*self.M] = np.log(sigma)
+        conn_b_o.params[2*self.M:] = np.reshape(centroid, self.M*self.c)
         #self.w2[0:self.M,0] = alpha
         #self.w2[self.M:2*self.M,0] = np.log(sigma)
         #self.w2[2*self.M:,0] = np.reshape(centroid, [self.M * self.c])
@@ -99,7 +103,7 @@ class MDNTrainer(SCGTrainer):
         sigma = np.minimum(y[self.M:2*self.M], np.log(np.finfo(float).max))
         sigma = np.exp(sigma) # sigma
         sigma = np.maximum(sigma, np.finfo(float).eps)
-        mu = y[2*self.M:]
+        mu = np.reshape(y[2*self.M:], [self.M, self.ds.outdim])
         return alpha, sigma, mu
 
     def setData(self, dataset):
@@ -110,7 +114,7 @@ class MDNTrainer(SCGTrainer):
 
     def _phi(self, T, mu, sigma):
         # distance between target data and gaussian kernels
-        dist = (T-mu)**2
+        dist = np.sum((T[None,:]-mu)**2, axis=1)
         phi = (1.0 / (2*np.pi*sigma)**(0.5*self.c)) * np.exp(- 1.0 * dist / (2 * sigma))
         # prevent underflow
         return np.maximum(phi, np.finfo(float).eps)
@@ -151,15 +155,15 @@ class MDNTrainer(SCGTrainer):
                 phi = trainer._phi(target, mu, sigma)
                 aphi = alpha*phi
                 pi = aphi / np.sum(aphi, 0)
-
+                #import pdb;pdb.set_trace()
                 dE_dy_alpha = alpha - pi
-                dE_dy_sigma = - 0.5 * pi * (((target-mu)**2 / sigma) - trainer.module.c)
-                dE_dy_mu = pi * (mu - target) / sigma
+                dE_dy_sigma = - 0.5 * pi * ((np.sum((target[None,:]-mu)**2, axis=1) / sigma) - trainer.module.c)
+                dE_dy_mu = pi[:,None] * (mu - target) / sigma[:, None]
 
                 outerr = np.zeros(trainer.module.outdim)
                 outerr[0:trainer.module.M] = dE_dy_alpha
                 outerr[trainer.module.M:2*trainer.module.M] = dE_dy_sigma
-                outerr[2*trainer.module.M:] = dE_dy_mu
+                outerr[2*trainer.module.M:] = np.reshape(dE_dy_mu, trainer.module.M*trainer.module.c)
                 str(outerr) # ??? s. backprop trainer
                 trainer.module.backActivate(outerr)
         # import pdb;pdb.set_trace()

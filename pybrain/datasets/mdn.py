@@ -25,7 +25,7 @@ class MDNDataSet(SupervisedDataSet):
         ponderation = 0.
         for input, target in seq:
             res = f(input)
-            e = 0.5 * sum((target-res).flatten()**2)
+            #e = 0.5 * sum((target-res).flatten()**2)
             e = mdn.mdn_err(res, target, self.M, self.c)
             totalError += e
             ponderation += len(target)
