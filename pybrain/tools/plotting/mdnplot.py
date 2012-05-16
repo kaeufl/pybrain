@@ -28,7 +28,8 @@ class MDNPlotter():
 
     def plot1DMixture(self, t, alpha, mu, sigma, target = None):
         p=self._p(t, alpha, mu, sigma)
-        p = p / np.sum(p)
+        dt = t / np.sum(t)
+        p = p / np.sum(p) / dt
         plt.plot(t, p, linewidth=1.5)
         ymax = plt.gca().get_ylim()[1]
         if target:
@@ -48,7 +49,7 @@ class MDNPlotter():
         plt.ylim(0)
         plt.xlim([np.min(tgts), np.max(tgts)])
         if plot_prior:
-            yprior = 1./200.
+            yprior = 1./(np.max(tgts)-np.min(tgts))
             plt.hlines(yprior, np.min(tgts), np.max(tgts))
 
     def plot2DMixtureForSample(self, sample,
