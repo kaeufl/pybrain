@@ -1,7 +1,9 @@
+import time
 __author__ = 'Paul Kaeufl, kaeufl@geo.uu.nl'
 
 import numpy as np
 from scg import SCGTrainer
+from time import time
 
 class MDNTrainer(SCGTrainer):
     """Minimise a mixture density error function using a scaled conjugate gradient
@@ -19,6 +21,8 @@ class MDNTrainer(SCGTrainer):
     def __init__(self, *args, **kwargs):
         self.M = args[0].M
         self.c = args[0].c
+        #self.M = kwargs['M']
+        #self.c = kwargs['c']
         SCGTrainer.__init__(self, *args, **kwargs)
 
 
@@ -85,21 +89,38 @@ class MDNTrainer(SCGTrainer):
         #self.w2[self.M:2*self.M,0] = np.log(sigma)
         #self.w2[2*self.M:,0] = np.reshape(centroid, [self.M * self.c])
 
+#    def softmax(self, x):
+#        # prevent overflow
+#        maxval = np.log(np.finfo(float).max) - np.log(x.shape[0])
+#        x = np.minimum(maxval, x)
+#        # prevent underflow
+#        minval = np.finfo(float).eps
+#        x = np.maximum(minval, x)
+#        return np.exp(x) / np.sum(np.exp(x), axis = 0)
+    
     def softmax(self, x):
         # prevent overflow
-        maxval = np.log(np.finfo(float).max) - np.log(x.shape[0])
+        maxval = np.log(np.finfo(float).max) - np.log(x.shape[1])
         x = np.minimum(maxval, x)
         # prevent underflow
         minval = np.finfo(float).eps
         x = np.maximum(minval, x)
-        return np.exp(x) / np.sum(np.exp(x), axis = 0)
+        return np.exp(x) / np.sum(np.exp(x), axis = 1)[:, None]
 
+#    def getMixtureParams(self, y):
+#        alpha = np.maximum(self.softmax(y[0:self.M]), np.finfo(float).eps)
+#        sigma = np.minimum(y[self.M:2*self.M], np.log(np.finfo(float).max))
+#        sigma = np.exp(sigma) # sigma
+#        sigma = np.maximum(sigma, np.finfo(float).eps)
+#        mu = y[2*self.M:]
+#        return alpha, sigma, mu
+    
     def getMixtureParams(self, y):
-        alpha = np.maximum(self.softmax(y[0:self.M]), np.finfo(float).eps)
-        sigma = np.minimum(y[self.M:2*self.M], np.log(np.finfo(float).max))
+        alpha = np.maximum(self.softmax(y[:, 0:self.M]), np.finfo(float).eps)
+        sigma = np.minimum(y[:, self.M:2*self.M], np.log(np.finfo(float).max))
         sigma = np.exp(sigma) # sigma
         sigma = np.maximum(sigma, np.finfo(float).eps)
-        mu = y[2*self.M:]
+        mu = np.reshape(y[:, 2*self.M:], (y.shape[0], self.M, self.c))
         return alpha, sigma, mu
 
     def setData(self, dataset):
@@ -108,60 +129,157 @@ class MDNTrainer(SCGTrainer):
         if dataset:
             assert dataset.indim == self.module.indim
 
+#    def _phi(self, T, mu, sigma):
+#        # distance between target data and gaussian kernels
+#        dist = (T-mu)**2
+#        phi = (1.0 / (2*np.pi*sigma)**(0.5*self.c)) * np.exp(- 1.0 * dist / (2 * sigma))
+#        # prevent underflow
+#        return np.maximum(phi, np.finfo(float).eps)
+    
     def _phi(self, T, mu, sigma):
-        # distance between target data and gaussian kernels
-        dist = (T-mu)**2
+        # distance between target data and Gaussian kernels
+        dist = np.sum((T[:,None,:]-mu)**2, axis=2)
         phi = (1.0 / (2*np.pi*sigma)**(0.5*self.c)) * np.exp(- 1.0 * dist / (2 * sigma))
         # prevent underflow
         return np.maximum(phi, np.finfo(float).eps)
 
+#    def mdn_err(self, y, t):
+#        alpha, sigma, mu = self.getMixtureParams(y)
+#        phi = self._phi(t, mu, sigma)
+#        tmp = np.maximum(np.sum(alpha * phi, 0), np.finfo(float).eps)
+#        return -np.log(tmp)
+    
     def mdn_err(self, y, t):
         alpha, sigma, mu = self.getMixtureParams(y)
         phi = self._phi(t, mu, sigma)
-        tmp = np.maximum(np.sum(alpha * phi, 0), np.finfo(float).eps)
+        tmp = np.maximum(np.sum(alpha * phi, 1), np.finfo(float).eps)
         return -np.log(tmp)
+    
+#    @staticmethod
+#    def f(params, trainer):
+#        t0=time()
+#        trainer.module._setParameters(params)
+#        error = 0
+#            
+#        for seq in trainer.ds._provideSequences():
+#            trainer.module.reset()
+#            for sample in seq:
+#                trainer.module.activate(sample[0])
+#            for offset, sample in reversed(list(enumerate(seq))):
+#                target = sample[1]
+#                y = trainer.module.outputbuffer[offset]
+#                error += trainer.mdn_err(y, target)
+#                
+#        trainer._last_err = error
+#        print "f took %.6f" % (time()-t0)
+#        return error
 
     @staticmethod
     def f(params, trainer):
         trainer.module._setParameters(params)
-        error = 0
+        y = np.zeros([trainer.ds.getLength(), trainer.module.outdim])
+        n = 0
         for seq in trainer.ds._provideSequences():
             trainer.module.reset()
-            for sample in seq:
+            for offset, sample in list(enumerate(seq)):
                 trainer.module.activate(sample[0])
-            for offset, sample in reversed(list(enumerate(seq))):
-                target = sample[1]
-                y = trainer.module.outputbuffer[offset]
-                error += trainer.mdn_err(y, target)
+                y[n] = trainer.module.outputbuffer[offset]
+            n+=1
+        error=np.sum(trainer.mdn_err(y, trainer.ds.getTargets()))
         trainer._last_err = error
+        #import pdb;pdb.set_trace()
+        
         return error
 
+#    def _f(self, seq):
+#        e = 0
+#        #self.module.reset()
+#        for sample in seq:
+#            self.module.activate(sample[0])
+#        for offset, sample in reversed(list(enumerate(seq))):
+#            target = sample[1]
+#            y = self.module.outputbuffer[offset]
+#            e += self.mdn_err(y, target)
+#        return e
+#    
+#    @staticmethod
+#    def f(params, trainer):
+#        t0=time()
+#        trainer.module._setParameters(params)
+#        error = np.sum(map(trainer._f, trainer.ds._provideSequences()))
+#        trainer._last_err = error
+#        print "f took %.6f" % (time()-t0)
+#        return error
+
+#    @staticmethod
+#    def df(params, trainer):
+#        t0=time()
+#        trainer.module._setParameters(params)
+#        trainer.module.resetDerivatives()
+#        for seq in trainer.ds._provideSequences():
+#            trainer.module.reset()
+#            for sample in seq:
+#                trainer.module.activate(sample[0])
+#            for offset, sample in reversed(list(enumerate(seq))):
+#                target = sample[1]
+#                y = trainer.module.outputbuffer[offset]
+#                alpha, sigma, mu = trainer.getMixtureParams(y)
+#                phi = trainer._phi(target, mu, sigma)
+#                aphi = alpha*phi
+#                pi = aphi / np.sum(aphi, 0)
+#
+#                dE_dy_alpha = alpha - pi
+#                dE_dy_sigma = - 0.5 * pi * (((target-mu)**2 / sigma) - trainer.c)
+#                dE_dy_mu = pi * (mu - target) / sigma
+#
+#                outerr = np.zeros(trainer.module.outdim)
+#                outerr[0:trainer.M] = dE_dy_alpha
+#                outerr[trainer.M:2*trainer.M] = dE_dy_sigma
+#                outerr[2*trainer.M:] = dE_dy_mu
+#                str(outerr) # ??? s. backprop trainer
+#                trainer.module.backActivate(outerr)
+#        # import pdb;pdb.set_trace()
+#        # self.module.derivs contains the _negative_ gradient ??? no apparently not
+#        #print "df took %.6f" % (time()-t0)
+#        return 1 * trainer.module.derivs
+    
     @staticmethod
     def df(params, trainer):
         trainer.module._setParameters(params)
         trainer.module.resetDerivatives()
+        N=trainer.ds.getLength()
+        y = np.zeros([N, trainer.module.outdim])
+        n = 0
+        for seq in trainer.ds._provideSequences():
+            trainer.module.reset()
+            for offset, sample in list(enumerate(seq)):
+                trainer.module.activate(sample[0])
+                y[n] = trainer.module.outputbuffer[offset]
+            n+=1
+        tgts=trainer.ds.getTargets()
+        alpha, sigma, mu = trainer.getMixtureParams(y)
+        phi = trainer._phi(tgts, mu, sigma)
+        aphi = alpha*phi
+        pi = aphi / np.sum(aphi, 1)[:, None]
+        dE_dy_alpha = alpha - pi
+        dE_dy_sigma = - 0.5 * pi * ((np.sum((tgts[:,None,:]-mu)**2, axis=2) / sigma) - trainer.c)
+        dE_dy_mu = pi[:,:,None] * (mu - tgts[:,None,:]) / sigma[:,:,None]
+
+        outerr = np.zeros((N, trainer.module.outdim))
+        outerr[:, 0:trainer.M] = dE_dy_alpha
+        outerr[:, trainer.M:2*trainer.M] = dE_dy_sigma
+        outerr[:, 2*trainer.M:] = np.reshape(dE_dy_mu, (N, trainer.M*trainer.c))
+        #str(outerr) # ??? s. backprop trainer
+        n=0
         for seq in trainer.ds._provideSequences():
             trainer.module.reset()
             for sample in seq:
                 trainer.module.activate(sample[0])
             for offset, sample in reversed(list(enumerate(seq))):
-                target = sample[1]
-                y = trainer.module.outputbuffer[offset]
-                alpha, sigma, mu = trainer.getMixtureParams(y)
-                phi = trainer._phi(target, mu, sigma)
-                aphi = alpha*phi
-                pi = aphi / np.sum(aphi, 0)
-
-                dE_dy_alpha = alpha - pi
-                dE_dy_sigma = - 0.5 * pi * (((target-mu)**2 / sigma) - trainer.module.c)
-                dE_dy_mu = pi * (mu - target) / sigma
-
-                outerr = np.zeros(trainer.module.outdim)
-                outerr[0:trainer.module.M] = dE_dy_alpha
-                outerr[trainer.module.M:2*trainer.module.M] = dE_dy_sigma
-                outerr[2*trainer.module.M:] = dE_dy_mu
-                str(outerr) # ??? s. backprop trainer
-                trainer.module.backActivate(outerr)
+                trainer.module.backActivate(outerr[n])
+            n+=1
         # import pdb;pdb.set_trace()
         # self.module.derivs contains the _negative_ gradient ??? no apparently not
-        return 1 * trainer.module.derivs
+        #print "df took %.6f" % (time()-t0)
+        # note: multiplying by one causes numpy to return a copy instead of a reference
+        return 1*trainer.module.derivs

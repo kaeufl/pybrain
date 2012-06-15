@@ -31,23 +31,24 @@ class SCG():
         self.xtracep = True
         self.ftracep = True
         self.sigma0 = 1.0e-4
+        #self.sigma0 = 1.0e-6
         self.nvars = len(x0)
         self.evalFunc = evalFunc or (lambda x: "Eval "+str(x))
 
-        self.success = True        # Force calculation of directional derivs.
-        self.nsuccess = 0        # nsuccess counts number of successes.
-        self.beta = 1.0        # Initial scale parameter.
-        self.betamin = 1.0e-15       # Lower bound on scale.
-        self.betamax = 1.0e100     # Upper bound on scale.
+        self.success = True     # Force calculation of directional derivs.
+        self.nsuccess = 0       # nsuccess counts number of successes.
+        self.beta = 1.0         # Initial scale parameter.
+        self.betamin = 1.0e-15  # Lower bound on scale.
+        self.betamax = 1.0e100  # Upper bound on scale.
         self.floatPrecision = sys.float_info.epsilon
-        self.j = 1       # j counts number of iterations.
+        self.j = 1              # j counts number of iterations.
 
         # initialize a few things
         self.fold = self.f(x0)
         self.fnow = self.fold
         self.gradnew = self.gradf(x0)
         self.gradold = copy(self.gradnew)
-        self.d = -self.gradnew        # Initial search direction.
+        self.d = -self.gradnew  # Initial search direction.
 
         if self.xtracep:
             self.xtrace = np.zeros((self.nIterations+1,len(x0)))
@@ -64,12 +65,15 @@ class SCG():
         """perform one iteration"""
         ### Main optimization loop.
         #while j <= nIterations:
+        #if self.j == 6:
+        #import pdb;pdb.set_trace()
 
         # Calculate first and second directional derivatives.
         if self.success:
             self.mu = np.dot(self.d, self.gradnew)
             if self.mu==np.nan: print "mu is NaN"
             if self.mu >= 0:
+                print "mu >=0"
                 self.d = -self.gradnew
                 self.mu = np.dot(self.d, self.gradnew)
             self.kappa = np.dot(self.d, self.d)
@@ -79,6 +83,9 @@ class SCG():
             sigma = self.sigma0/sqrt(self.kappa)
             xplus = x + sigma * self.d
             gplus = self.gradf(xplus)
+            #Here a finite difference approximation to H*d is used.
+            #Bishop(1995) suggests in chapter 4.10.7 to use an operator-based
+            #analytical approach instead.
             self.theta = np.dot(self.d, gplus - self.gradnew)/sigma
 
         ## Increase effective curvature and evaluate step size alpha.
@@ -86,13 +93,16 @@ class SCG():
         if delta is np.nan: print "delta is NaN"
         if delta <= 0:
             delta = self.beta * self.kappa
-            self.beta = self.beta - self.theta/self.kappa
+            #delta = -self.theta
+            #self.beta = self.beta - self.theta/self.kappa
+            #self.beta = self.beta - self.theta/self.kappa
         alpha = -self.mu/delta
 
         ## Calculate the comparison ratio.
         xnew = x + alpha * self.d
         fnew = self.f(xnew)
         Delta = 2 * (fnew - self.fold) / (alpha*self.mu)
+        #Delta = 2 * (self.fold - fnew) / (alpha*self.mu)
         if Delta is not np.nan and Delta  >= 0:
             self.success = True
             self.nsuccess += 1
@@ -123,7 +133,7 @@ class SCG():
             else:
                 ## Update variables for new position
                 self.fold = fnew
-                self.gradold = self.gradnew
+                self.gradold = copy(self.gradnew)
                 self.gradnew = self.gradf(x)
                 #print "gradold",gradold
                 #print "gradnew",gradnew
