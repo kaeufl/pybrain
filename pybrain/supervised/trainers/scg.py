@@ -4,6 +4,7 @@ from scipy import sum, finfo
 
 from trainer import Trainer
 from pybrain.auxiliary.scg import SCG
+from copy import copy
 
 class SCGTrainer(Trainer):
     """Trainer that trains the parameters of a module according to a
@@ -19,6 +20,7 @@ class SCGTrainer(Trainer):
         """
         Trainer.__init__(self, module)
         self.setData(dataset)
+        self.input_sequences = self.ds.getField('input')
         self.epoch = 0
         self.totalepochs = 0
         self.module = module
@@ -30,6 +32,7 @@ class SCGTrainer(Trainer):
 
     @staticmethod
     def f(params, trainer):
+        oldparams=copy(trainer.module.params)
         trainer.module._setParameters(params)
         error = 0
         for seq in trainer.ds._provideSequences():
@@ -42,10 +45,12 @@ class SCGTrainer(Trainer):
                 error += 0.5 * sum(outerr ** 2)
 
         trainer._last_err = error
+        trainer.module._setParameters(oldparams)
         return error
 
     @staticmethod
     def df(params, trainer):
+        oldparams=copy(trainer.module.params)
         trainer.module._setParameters(params)
         trainer.module.resetDerivatives()
         for seq in trainer.ds._provideSequences():
@@ -58,7 +63,8 @@ class SCGTrainer(Trainer):
                 str(outerr)
                 trainer.module.backActivate(outerr)
         # import pdb;pdb.set_trace()
-        # self.module.derivs contains the _negative_ gradient
+        trainer.module._setParameters(oldparams)
+        # self.module.derivs contains the _negative_ gradient?
         return -1 * trainer.module.derivs
 
     def train(self):

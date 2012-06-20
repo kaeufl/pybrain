@@ -93,9 +93,8 @@ class SCG():
         if delta is np.nan: print "delta is NaN"
         if delta <= 0:
             delta = self.beta * self.kappa
-            #delta = -self.theta
-            #self.beta = self.beta - self.theta/self.kappa
-            #self.beta = self.beta - self.theta/self.kappa
+            # XXX: not sure about this line:
+            self.beta = self.beta - self.theta/self.kappa
         alpha = -self.mu/delta
 
         ## Calculate the comparison ratio.
