@@ -28,16 +28,14 @@ def getMixtureParams(Y, M, c):
     mu = np.reshape(Y[:, 2*M:], (Y.shape[0], M, c))
     return alpha, sigma, mu
 
-def mdn_err(y, t, M, c):
-    alpha, sigma, mu = getMixtureParams(y, M, c)
-    # distance between target data and gaussian kernels
-    dist = np.sum((t[None,:]-mu)**2, axis=1)
-    phi = (1.0 / (2*np.pi*sigma)**(0.5*c)) * np.exp(- 1.0 * dist / (2 * sigma))
-    phi = np.maximum(phi, np.finfo(float).eps)
-    tmp = np.maximum(np.sum(alpha * phi, 0), np.finfo(float).eps)
-    return -np.log(tmp)
+def getError(Y, T, M, c):
+    alpha, sigma, mu = getMixtureParams(Y, M, c)
+    tmp = phi(T, mu, sigma, c)
+    tmp = np.maximum(np.sum(alpha * tmp, 1), np.finfo(float).eps)
+    tmp = -np.log(tmp)
+    return np.sum(tmp) / Y.shape[0]
 
 def phi(T, mu, sigma, c):
     dist = np.sum((T[:,None,:]-mu)**2, axis=2)
-    phi = (1.0 / (2*np.pi*sigma)**(0.5*c)) * np.exp(- 1.0 * dist / (2 * sigma))
-    return np.maximum(phi, np.finfo(float).eps)
+    tmp = (1.0 / (2*np.pi*sigma)**(0.5*c)) * np.exp(- 1.0 * dist / (2 * sigma))
+    return np.maximum(tmp, np.finfo(float).eps)

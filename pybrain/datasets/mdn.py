@@ -19,18 +19,6 @@ class MDNDataSet(SupervisedDataSet):
         args = self.indim, self.outdim, self.M
         return creator, args, state, iter([]), iter({})
 
-    def _evaluateSequence(self, f, seq):
-        """Return the mdn error over one sequence."""
-        totalError = 0.
-        ponderation = 0.
-        for input, target in seq:
-            res = f(input)
-            #e = 0.5 * sum((target-res).flatten()**2)
-            e = mdn.mdn_err(res, target, self.M, self.c)
-            totalError += e
-            ponderation += len(target)
-        return totalError, ponderation
-
     def getTargets(self):
         tgts = []
         for k in range(self.getLength()):
