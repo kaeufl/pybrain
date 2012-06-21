@@ -8,20 +8,14 @@ from pybrain.structure import LinearLayer, TanhLayer, \
 class MixtureDensityNetwork(FeedForwardNetwork):
     """Mixture density network
     """
-    def __init__(self, H, di, dy, M=1, **args):
-        FeedForwardNetwork.__init__(self, **args)
+    def __init__(self, M, c, *args, **kwargs):
+        FeedForwardNetwork.__init__(self, *args, **kwargs)
         self.M = M
-        self.c = dy
-        dy = (2+dy)*M
-        self.addInputModule(LinearLayer(di, name = 'i'))
-        self.addModule(TanhLayer(H, name = 'h'))
-        self.addModule(BiasUnit('bias'))
-        self.addOutputModule(LinearLayer(dy, name = 'o'))
-        self.addConnection(FullConnection(self['i'], self['h']))
-        self.addConnection(FullConnection(self['bias'], self['h']))
-        self.addConnection(FullConnection(self['bias'], self['o']))
-        self.addConnection(FullConnection(self['h'], self['o']))
-        self.sortModules()
+        self.c = c
+        # we have to include the additional arguments in argdict in order to
+        # have XML serialization work properly
+        self.argdict['c'] = c
+        self.argdict['M'] = M
 
     def softmax(self, x):
         # prevent overflow
@@ -104,3 +98,20 @@ class MixtureDensityNetwork(FeedForwardNetwork):
         #cnet.M = self.M
         #cnet.c = self.c
         return cnet
+
+def buildMixtureDensityNetwork(di, H, dy, M, fast = False):
+    net = MixtureDensityNetwork(M, dy)
+    dy = (2+dy)*M
+    net.addInputModule(LinearLayer(di, name = 'i'))
+    net.addModule(TanhLayer(H, name = 'h'))
+    net.addModule(BiasUnit('bias'))
+    net.addOutputModule(LinearLayer(dy, name = 'o'))
+    net.addConnection(FullConnection(net['i'], net['h']))
+    net.addConnection(FullConnection(net['bias'], net['h']))
+    net.addConnection(FullConnection(net['bias'], net['o']))
+    net.addConnection(FullConnection(net['h'], net['o']))
+    net.sortModules()
+    if fast:
+        net = net.convertToFastNetwork()
+        net.sortModules()
+    return net
