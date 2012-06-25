@@ -99,6 +99,30 @@ class MixtureDensityNetwork(FeedForwardNetwork):
         #cnet.c = self.c
         return cnet
 
+    def convertToPythonNetwork(self):
+        cnet = self.copy()
+        net = MixtureDensityNetwork(self.M, self.c)
+
+        for m in cnet.inmodules:
+            net.addInputModule(m)
+        for m in cnet.outmodules:
+            net.addOutputModule(m)
+        for m in cnet.modules:
+            net.addModule(m)
+
+        for clist in cnet.connections.values():
+            for c in clist:
+                net.addConnection(c)
+
+        try:
+            net.sortModules()
+        except ValueError:
+            print "Network cannot be converted."
+            return None
+
+        net.owner = net
+        return net
+
 def buildMixtureDensityNetwork(di, H, dy, M, fast = False):
     net = MixtureDensityNetwork(M, dy)
     dy = (2+dy)*M

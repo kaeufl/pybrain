@@ -4,6 +4,10 @@ import numpy as np
 from scg import SCGTrainer
 from time import time
 from copy import copy
+from itertools import islice
+from IPython.parallel import Client
+from IPython.parallel.util import interactive
+from arac.pybrainbridge import _Network
 
 class MDNTrainer(SCGTrainer):
     """Minimise a mixture density error function using a scaled conjugate gradient
@@ -80,7 +84,7 @@ class MDNTrainer(SCGTrainer):
 
     @staticmethod
     def f(params, trainer):
-        #t0=time()
+        t0=time()
         oldparams=copy(trainer.module.params)
         trainer.module._setParameters(params)
         error = 0
@@ -94,7 +98,7 @@ class MDNTrainer(SCGTrainer):
                 error += trainer.module.getError(y, target)
         trainer._last_err = error
         trainer.module._setParameters(oldparams)
-        #print "f took %.6f" % (time()-t0)
+        print "f took %.6f" % (time()-t0)
         return error
 
     @staticmethod
@@ -208,3 +212,116 @@ class MDNTrainer(SCGTrainer):
 #        phi = self._phi(t, mu, sigma)
 #        tmp = np.maximum(np.sum(alpha * phi, 1), np.finfo(float).eps)
 #        return -np.log(tmp)
+
+module = None
+sequences = None
+
+class ParallelMDNTrainer(MDNTrainer):
+    """
+    Trainer performs batch training in parallel on nprocs processors.
+    """
+
+    def __init__(self, module, dataset, nprocs, *args, **kwargs):
+        self.nprocs = nprocs
+
+        # split dataset into nprocs chunks
+        N = dataset.getLength()/nprocs
+        print "Training in parallel using %d engines." % nprocs
+        self.sequences = list()
+        for n in range(nprocs):
+            #self.sequences.append(islice(dataset._provideSequences(), n*N, (n+1)*N))
+            chunk = list(islice(dataset._provideSequences(), n*N, (n+1)*N))
+            self.sequences.append(chunk)
+            print "Engine %d: %d samples." % (n, len(chunk))
+
+        self.client = Client()
+        dview = self.client[:]
+
+        # XXX: workaround: I don't know of a way to pickle Swig objects. Therefore
+        # we convert the C++ network into a python network, push the python network
+        # to the engines, and convert it back to a C++ network.
+        if isinstance(module, _Network):
+            pymodule = module.convertToPythonNetwork()
+        else:
+            pymodule = module
+
+        print "Pushing training data to engines..."
+        for idx, seq in list(enumerate(self.sequences)):
+            self.client[idx].push({'sequences': seq})
+        print "Done"
+        dview.push({'module':pymodule})
+        if isinstance(module, _Network):
+            dview.apply(ParallelMDNTrainer._convertModule)
+
+        MDNTrainer.__init__(self, module, dataset, *args, **kwargs)
+
+    @staticmethod
+    @interactive
+    def _convertModule():
+        global module
+        module=module.convertToFastNetwork()
+
+    @staticmethod
+    @interactive
+    def _f(params):
+        error = 0
+        module._setParameters(params)
+        #m = module.convertToFastNetwork()
+        for seq in sequences:
+            module.reset()
+            for sample in seq:
+                y = module.activate(sample[0])
+            #for offset, sample in reversed(list(enumerate(seq))):
+                target = sample[1]
+                error += module.getError(y, target)
+        return error
+
+    @staticmethod
+    @interactive
+    def _df(params):
+        module._setParameters(params)
+        module.resetDerivatives()
+        for seq in sequences:
+            module.reset()
+            for sample in seq:
+                module.activate(sample[0])
+            for offset, sample in reversed(list(enumerate(seq))):
+                y = module.outputbuffer[offset]
+                outerr = module.getOutputError(y, sample[1])
+                # str(outerr) # ??? s. backprop trainer
+                module.backActivate(outerr)
+        return module.derivs
+
+    @staticmethod
+    def f(params, trainer):
+        t0=time()
+        #oldparams=copy(trainer.module.params)
+        #trainer.module._setParameters(params)
+        error = 0
+        ar = list()
+        for cl in trainer.client:
+            ar.append(cl.apply_async(ParallelMDNTrainer._f, params))
+        for res in ar:
+            error += res.get()
+
+        trainer._last_err = error
+        #trainer.module._setParameters(oldparams)
+        print "f took %.6f" % (time()-t0)
+        return error
+
+    @staticmethod
+    def df(params, trainer):
+        t0=time()
+        #oldparams=copy(trainer.module.params)
+        #trainer.module._setParameters(params)
+        #trainer.module.resetDerivatives()
+        ar = list()
+        derivs = np.zeros(trainer.module.paramdim)
+        for cl in trainer.client:
+            ar.append(cl.apply_async(ParallelMDNTrainer._df, params))
+        for res in ar:
+            derivs += res.get()
+
+        #trainer.module._setParameters(oldparams)
+        print "df took %.6f" % (time()-t0)
+        return derivs
