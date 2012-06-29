@@ -23,7 +23,7 @@ class MDNTrainer(SCGTrainer):
         of the target data p(t)
         t: target data
         """
-        from scipy.cluster.vq import kmeans2
+        from scipy.cluster.vq import kmeans2, kmeans
         from scipy.spatial.distance import cdist
 
         t = []
@@ -53,8 +53,10 @@ class MDNTrainer(SCGTrainer):
         # TODO: here we assume that the first bias connection is always bias->h, the second bias->o
         conn_b_h = self.module.connections[self.module['bias']][0]
         conn_b_o = self.module.connections[self.module['bias']][1]
-
-        [centroid, label] = kmeans2(t, self.module.M)
+        
+	# added minit="points", since this seems to give better results, with minit="random" kmeans sometimes returns
+	# centroids outside target range
+        [centroid, label] = kmeans2(t, self.module.M, minit='points')
         cluster_sizes = np.maximum(np.bincount(label), 1) # avoid empty clusters
         alpha = cluster_sizes.astype('float64')/np.sum(cluster_sizes)
         if (self.module.M > 1):
@@ -84,7 +86,7 @@ class MDNTrainer(SCGTrainer):
 
     @staticmethod
     def f(params, trainer):
-        t0=time()
+        #t0=time()
         oldparams=copy(trainer.module.params)
         trainer.module._setParameters(params)
         error = 0
@@ -98,7 +100,7 @@ class MDNTrainer(SCGTrainer):
                 error += trainer.module.getError(y, target)
         trainer._last_err = error
         trainer.module._setParameters(oldparams)
-        print "f took %.6f" % (time()-t0)
+        #print "f took %.6f" % (time()-t0)
         return error
 
     @staticmethod
@@ -294,7 +296,7 @@ class ParallelMDNTrainer(MDNTrainer):
 
     @staticmethod
     def f(params, trainer):
-        t0=time()
+        #t0=time()
         #oldparams=copy(trainer.module.params)
         #trainer.module._setParameters(params)
         error = 0
@@ -306,12 +308,12 @@ class ParallelMDNTrainer(MDNTrainer):
 
         trainer._last_err = error
         #trainer.module._setParameters(oldparams)
-        print "f took %.6f" % (time()-t0)
+        #print "f took %.6f" % (time()-t0)
         return error
 
     @staticmethod
     def df(params, trainer):
-        t0=time()
+        #t0=time()
         #oldparams=copy(trainer.module.params)
         #trainer.module._setParameters(params)
         #trainer.module.resetDerivatives()
@@ -323,5 +325,5 @@ class ParallelMDNTrainer(MDNTrainer):
             derivs += res.get()
 
         #trainer.module._setParameters(oldparams)
-        print "df took %.6f" % (time()-t0)
+        #print "df took %.6f" % (time()-t0)
         return derivs
