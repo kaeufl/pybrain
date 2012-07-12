@@ -38,9 +38,9 @@ class MDNPlotter():
         alpha, sigma, mu = self.module.getMixtureParams(self.y[sample])
         tgts = self.tgts
         if transform:
-            sigma = sigma*transform[0]**2
-            mu = self.linTransform(mu, transform[1], transform[0])
-            tgts = self.linTransform(tgts, transform[1], transform[0])
+            sigma = sigma*transform['scale']**2
+            mu = self.linTransform(mu, transform['mean'], transform['scale'])
+            tgts = self.linTransform(tgts, transform['mean'], transform['scale'])
         t = np.linspace(np.min(tgts), np.max(tgts), 150)
         p = self.plot1DMixture(t, alpha, mu, sigma, tgts[sample], linewidth)
         if show_target_dist:
@@ -67,7 +67,7 @@ class MDNPlotter():
             p.append(tmp)
         return np.array(p)
 
-    def plotCenters(self, center = None, transform = None):
+    def plotCenters(self, center = None, transform = None, interactive=False):
         alpha, sigma, mu = mdn.getMixtureParams(self.y, self.module.M, self.module.c)
 
         tgts = self.tgts
@@ -79,10 +79,13 @@ class MDNPlotter():
         else:
             # select centers with highest mixing coefficient
             maxidxs = np.argmax(alpha, axis=1)
-            print maxidxs
+            #print maxidxs
             mu = mu[np.arange(0,len(mu)), maxidxs]
 
-        plt.scatter(mu, tgts)
+        plt.scatter(mu, tgts, picker=interactive)
+        if interactive:
+            f=plt.gcf()
+            f.canvas.mpl_connect('pick_event', MDNPlotter.scatterPick)
         plt.xlabel('Network prediction')
         plt.ylabel('Target value')
         xlims=[np.min(mu), np.max(mu)]
@@ -91,3 +94,8 @@ class MDNPlotter():
         plt.ylim(ylims)
 
         return mu, self.tgts
+    
+    @staticmethod
+    def scatterPick(event):
+        ind = event.ind
+        print 'Pattern:', ind
