@@ -2,6 +2,7 @@ __author__ = 'Paul Kaeufl, kaeufl@geo.uu.nl'
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.stats import cumfreq
 from pybrain.auxiliary import mdn
 
 class MDNPlotter():
@@ -34,6 +35,7 @@ class MDNPlotter():
     def plot1DMixtureForSample(self, sample, transform=None,
                                show_target_dist=False,
                                show_uniform_prior=False,
+                               prior_range=None,
                                linewidth=2.0):
         alpha, sigma, mu = self.module.getMixtureParams(self.y[sample])
         tgts = self.tgts
@@ -41,15 +43,20 @@ class MDNPlotter():
             sigma = sigma*transform['scale']**2
             mu = self.linTransform(mu, transform['mean'], transform['scale'])
             tgts = self.linTransform(tgts, transform['mean'], transform['scale'])
-        t = np.linspace(np.min(tgts), np.max(tgts), 150)
+            if prior_range:
+                prior_range = self.linTransform(prior_range, transform['mean'],
+                        transform['scale'])
+        if prior_range==None:
+            prior_range=[np.min(tgts), np.max(tgts)]
+        t = np.linspace(prior_range[0], prior_range[1], 150)
         p = self.plot1DMixture(t, alpha, mu, sigma, tgts[sample], linewidth)
         if show_target_dist:
             [h, edges] = np.histogram(tgts, 150, normed=True,
                                       range=(np.min(tgts), np.max(tgts)))
             plt.plot(edges[1:], h, 'g:')
         if show_uniform_prior:
-            yprior = 1./(np.max(tgts)-np.min(tgts))
-            plt.hlines(yprior, np.min(tgts), np.max(tgts), 'g', linewidth=linewidth)
+            yprior = 1./(prior_range[1]-prior_range[0])
+            plt.hlines(yprior, prior_range[0], prior_range[1], 'g', linewidth=linewidth)
         #plt.xlim((np.min(tgts), np.max(tgts)))
         #plt.ylim((0, plt.gca().get_ylim()[1]))
         return t, p
@@ -78,7 +85,8 @@ class MDNPlotter():
             mu = mu[:, center]
         else:
             # select centers with highest mixing coefficient
-            maxidxs = np.argmax(alpha, axis=1)
+            #maxidxs = np.argmax(alpha, axis=1)
+            maxidxs = self.getMaxKernel(alpha, sigma)
             #print maxidxs
             mu = mu[np.arange(0,len(mu)), maxidxs]
 
@@ -99,3 +107,44 @@ class MDNPlotter():
     def scatterPick(event):
         ind = event.ind
         print 'Pattern:', ind
+
+    def getMode(self):
+        """Return the mode of the distribution for every sample in the
+        dataset"""
+        pass
+    
+    def getMaxKernel(self, alpha, sigma):
+        """
+        Return the mixture component having the largest central value.
+        """
+        return np.argmax(alpha/sigma**self.module.c, axis=1)
+        
+
+    def plotRECCurve(self, nbins=20, highlight_error=None):
+        """
+        Plot a Regression Error Characteristic (REC) curve.
+
+        The resulting REC curve shows the cumulative distribution of errors
+        over the dataset, where the error is measured in distance of the mode
+        of the mixture distribution from the target value in standard
+        deviations.
+
+        TODO: Use the true mode rather than the kernel with the largest mixing
+        coefficient.
+        """
+        alpha, sigma, mu = mdn.getMixtureParams(self.y, self.module.M, self.module.c)
+        #maxidxs = np.argmax(alpha, axis=1)
+        maxidxs=self.getMaxKernel(alpha, sigma)
+        N=len(mu)
+        mu = mu[np.arange(0,N), maxidxs]
+        sigma = sigma[np.arange(0,N), maxidxs]
+        dist = np.sum(np.abs(mu-self.tgts), axis=1)
+        dist /= sigma
+        h,_,_,_ = cumfreq(dist, nbins)
+        h/=N
+        plt.plot(h)
+        if highlight_error:
+            plt.vlines(highlight_error, 0, 1, linestyles='-.')
+        plt.xlabel('$\epsilon$ [n std deviations]')
+        plt.ylabel('accuracy')
+        return dist
