@@ -12,12 +12,6 @@ import numpy as np
 #    return np.exp(x) / np.sum(np.exp(x), axis = 0)
 
 def softmax(x):
-    # prevent overflow
-    maxval = np.log(np.finfo(float).max) - np.log(x.shape[1])
-    x = np.minimum(maxval, x)
-    # prevent underflow
-    minval = np.finfo(float).eps
-    x = np.maximum(minval, x)
     return np.exp(x) / np.sum(np.exp(x), axis = 1)[:, None]
 
 def getMixtureParams(Y, M, c):
