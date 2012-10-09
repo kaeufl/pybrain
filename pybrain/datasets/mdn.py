@@ -3,8 +3,11 @@ __author__ = 'Paul Kaeufl, kaeufl@geo.uu.nl'
 import numpy as np
 from supervised import SupervisedDataSet
 from pybrain.auxiliary import mdn
+from arac.cppbridge import SupervisedSimpleDataset
 
 class MDNDataSet(SupervisedDataSet):
+    _cdataset = None
+    
     def __init__(self, inp, target, M, inp_transform=None, tgt_transform=None):
         SupervisedDataSet.__init__(self, inp, target)
         self.M = M
@@ -26,3 +29,11 @@ class MDNDataSet(SupervisedDataSet):
         for k in range(self.getLength()):
             tgts.append(self.getSample(k)[1])
         return np.array(tgts)
+    
+    def getFastDataset(self):
+        if not self._cdataset:
+            self._cdataset = SupervisedSimpleDataset(self.indim, self.c)
+            for k in range(self.getLength()):
+                sample = self.getSample(k)
+                self._cdataset.append(sample[0], sample[1])
+        return self._cdataset

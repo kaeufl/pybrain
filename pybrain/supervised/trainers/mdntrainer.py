@@ -8,6 +8,7 @@ from itertools import islice
 from IPython.parallel import Client
 from IPython.parallel.util import interactive
 from arac.pybrainbridge import _Network
+from arac.cppbridge import MDNTrainer as CMDNTrainer
 
 class MDNTrainer(SCGTrainer):
     """Minimise a mixture density error function using a scaled conjugate gradient
@@ -17,6 +18,8 @@ class MDNTrainer(SCGTrainer):
     TODO: This can be considered as a workaround. The error function should really
     not be part of the trainer or the network.
     """
+    _cmdntrainer = None
+    
     def initNetworkWeights(self, sigma0=1.0, scaled_prior=True):
         """
         initialize weights and biases so that the network models the unconditional density
@@ -121,6 +124,13 @@ class MDNTrainer(SCGTrainer):
         trainer.module._setParameters(oldparams)
         #print "df took %.6f" % (time()-t0)
         return 1 * trainer.module.derivs
+    
+    def getFastTrainer(self):
+        assert isinstance(self.module, _Network)
+        if not self._cmdntrainer:
+            self._cmdntrainer = CMDNTrainer(self.module.proxies.map[self.module], 
+                                            self.ds.getFastDataset())
+        return self._cmdntrainer
 
 #    @staticmethod
 #    def f(params, trainer):

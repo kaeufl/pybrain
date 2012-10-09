@@ -148,3 +148,21 @@ class MDNPlotter():
         plt.xlabel('$\epsilon$ [n std deviations]')
         plt.ylabel('accuracy')
         return dist
+    
+    def interactiveScatterPlot(self):
+        def updatePlot(pick_event):
+            event = pick_event.ind[0]
+            print "Selected events: ", pick_event.ind
+            print "Plotting event: ", event
+            plt.subplot(1,2,2)
+            plt.cla()
+            mdnplt.plot1DMixtureForSample(event, show_target_dist=True, 
+                                          show_uniform_prior=True)
+
+        
+        mdnplt = MDNPlotter(self.module, self.ds)
+        
+        plt.subplot(1,2,1)
+        mdnplt.plotCenters()
+        f=plt.gcf()
+        f.canvas.mpl_connect('pick_event', updatePlot)

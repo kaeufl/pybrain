@@ -41,7 +41,9 @@ class SCG():
         self.betamin = 1.0e-15  # Lower bound on scale.
         self.betamax = 1.0e100  # Upper bound on scale.
         self.floatPrecision = sys.float_info.epsilon
-        self.j = 1              # j counts number of iterations.
+        #self.j = 1              # j counts number of iterations.
+        # XXX: no clue why this was set to one...
+        self.j = 0              # j counts number of iterations.
 
         # initialize a few things
         self.fold = self.f(x0)
