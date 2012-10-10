@@ -125,11 +125,16 @@ class MDNTrainer(SCGTrainer):
         #print "df took %.6f" % (time()-t0)
         return 1 * trainer.module.derivs
     
-    def getFastTrainer(self):
+    def getFastTrainer(self, testset=None):
         assert isinstance(self.module, _Network)
         if not self._cmdntrainer:
-            self._cmdntrainer = CMDNTrainer(self.module.proxies.map[self.module], 
-                                            self.ds.getFastDataset())
+            if testset==None:
+                self._cmdntrainer = CMDNTrainer(self.module.proxies.map[self.module], 
+                                                self.ds.getFastDataset())
+            else:
+                self._cmdntrainer = CMDNTrainer(self.module.proxies.map[self.module], 
+                                                self.ds.getFastDataset(),
+                                                testset.getFastDataset())
         return self._cmdntrainer
 
 #    @staticmethod
