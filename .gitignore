@@ -1,3 +1,5 @@
+*.py~
+*.pyo
 *.pyc
 *.egg-info
 *.xml
