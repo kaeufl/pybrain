@@ -116,107 +116,47 @@ class MixtureDensityNetwork(FeedForwardNetwork):
 
         net.owner = net
         return net
-    
-#class FastMixtureDensityNetwork(MixtureDensityNetwork):
-#    """
-#    This class implements a hard coded two-layer feed-forward MDN with tanh activation
-#    functions, where all calculations are cast as numpy matrix operations for performance.
-#    
-#    Note 1: It does not make use of any of the PyBrain modular framework, therefore
-#    being considered as a quick hack for getting more performance in a special case.
-#    
-#    Note 2: Not to be confused with the ARAC fast network implementation.
-#    """
-#    def __init__(self, di, H, dy, M, *args, **kwargs):
-#        FeedForwardNetwork.__init__(self, *args, **kwargs)
-#        self.M = M
-#        self.c = dy
-#        self.H = H
-#        self.di = di
-#        # we have to include the additional arguments in argdict in order to
-#        # have XML serialization work properly
-#        self.argdict['c'] = dy
-#        self.argdict['M'] = M
-#        self.argdict['H'] = H
-#        self.argdict['di'] = di
-#        
-#        dy = (2+dy)*M
-#        
-#        self.paramdim = (di+1)*H+(H+1)*dy
-#        
-#        # we don't care for mapping the parameters array to some modules here, it's
-#        # just a plain simple array
-#        # parameters are ordered as follows:
-#        # [bias->h, bias->o, i->h, h->o]
-#        self.params = np.zeros(self.paramdim)
-#        
-#        
-#    def _setParameters(self, p, owner=None):
-#        """ set the parameter array """
-#        assert p.shape == [self.paramdim]
-#        self.params = p
-#        
-#    def _forwardImplementation(self, inbuf, outbuf):
-#        #self.z = np.append(np.ones([1, x.shape[0]]), self.g(np.dot(w1, x.T)), axis = 0)
-#        # calculate output values
-#        #y = np.dot(w2, self.z)
-#        index = self.H + self.dy
-#        x = np.append(np.ones([inbuf.shape[0],1]),x,1)
-#        self.z = np.tanh(np.dot(self.params[index:index+self.di], inbuf))
-#        z = 
-#        
-#        
-#        assert self.sorted, ".sortModules() has not been called"
-#        index = 0
-#        offset = self.offset
-#        for m in self.inmodules:
-#            m.inputbuffer[offset] = inbuf[index:index + m.indim]
-#            index += m.indim
-#
-#        for m in self.modulesSorted:
-#            m.forward()
-#            for c in self.connections[m]:
-#                c.forward()
-#
-#        index = 0
-#        for m in self.outmodules:
-#            outbuf[index:index + m.outdim] = m.outputbuffer[offset]
-#            index += m.outdim
-#
-#    def _backwardImplementation(self, outerr, inerr, outbuf, inbuf):
-#        assert self.sorted, ".sortModules() has not been called"
-#        index = 0
-#        offset = self.offset
-#        for m in self.outmodules:
-#            m.outputerror[offset] = outerr[index:index + m.outdim]
-#            index += m.outdim
-#
-#        for m in reversed(self.modulesSorted):
-#            for c in self.connections[m]:
-#                c.backward()
-#            m.backward()
-#
-#        index = 0
-#        for m in self.inmodules:
-#            inerr[index:index + m.indim] = m.inputerror[offset]
-#            index += m.indim
+
+#def buildMixtureDensityNetwork(di, H, dy, M, fast = False):
+#    net = MixtureDensityNetwork(M, dy)
+#    dy = (2+dy)*M
+#    net.addInputModule(LinearLayer(di, name = 'i'))
+#    net.addModule(TanhLayer(H, name = 'h'))
+#    net.addModule(BiasUnit('bias'))
+#    net.addOutputModule(LinearLayer(dy, name = 'o'))
+#    net.addConnection(FullConnection(net['i'], net['h']))
+#    net.addConnection(FullConnection(net['bias'], net['h']))
+#    net.addConnection(FullConnection(net['bias'], net['o']))
+#    net.addConnection(FullConnection(net['h'], net['o']))
+#    net.sortModules()
+#    if fast:
+#        net = net.convertToFastNetwork()
+#        net.sortModules()
+#    return net
 
 def buildMixtureDensityNetwork(di, H, dy, M, fast = False):
+    if type(H) == int:
+        H = [H]
     net = MixtureDensityNetwork(M, dy)
     dy = (2+dy)*M
     net.addInputModule(LinearLayer(di, name = 'i'))
-    net.addModule(TanhLayer(H, name = 'h'))
     net.addModule(BiasUnit('bias'))
+    for i, h in enumerate(H):
+        net.addModule(TanhLayer(h, name = 'h%i'%i))
     net.addOutputModule(LinearLayer(dy, name = 'o'))
-    net.addConnection(FullConnection(net['i'], net['h']))
-    net.addConnection(FullConnection(net['bias'], net['h']))
+    net.addConnection(FullConnection(net['i'], net['h0']))
+    net.addConnection(FullConnection(net['bias'], net['h0']))
+    for i, h in enumerate(H[1:]):
+        net.addConnection(FullConnection(net['bias'], net['h%i' % (i+1)]))
+        net.addConnection(FullConnection(net['h%i' % (i)], net['h%i' % (i+1)]))    
     net.addConnection(FullConnection(net['bias'], net['o']))
-    net.addConnection(FullConnection(net['h'], net['o']))
+    net.addConnection(FullConnection(net['h%i' % (len(H)-1)], net['o']))
     net.sortModules()
     if fast:
         net = net.convertToFastNetwork()
         net.sortModules()
     return net
+    
 
 #def buildFastMixtureDensityNetwork(di, H, dy, M):
 #    net = FastMixtureDensityNetwork(di, H, dy, M)

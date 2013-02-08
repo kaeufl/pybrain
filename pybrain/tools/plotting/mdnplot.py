@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib import mpl
 from scipy.stats import cumfreq
 from pybrain.auxiliary import mdn
+from nnutil.preprocessing import center, standardize, whiten
 
 class MDNPlotter():
     def __init__(self, module, ds):
@@ -15,6 +16,7 @@ class MDNPlotter():
 
     def update(self):
         self.y = self.module.activateOnDataset(self.ds)
+        self.p = None
 
     def _p(self, t, alpha, mu, sigma):
         return np.sum(alpha * mdn.phi(t, mu, sigma, self.module.c), axis = 1)
@@ -38,7 +40,9 @@ class MDNPlotter():
                                show_uniform_prior=False,
                                prior_range=None,
                                linewidth=2.0,
-                               res=300):
+                               res=300,
+                               target_dist_line_style='g:',
+                               target_dist_linewidth=0.5):
         alpha, sigma, mu = self.module.getMixtureParams(self.y[sample])
         tgts = self.tgts
         if transform:
@@ -59,39 +63,61 @@ class MDNPlotter():
         if show_target_dist:
             [h, edges] = np.histogram(tgts, res, normed=True,
                                       range=(np.min(tgts), np.max(tgts)))
-            plt.plot(edges[1:], h, 'g:')
+            plt.plot(edges[1:], h, target_dist_line_style)
         if show_uniform_prior:
             yprior = 1./(prior_range[1]-prior_range[0])
             plt.hlines(yprior, prior_range[0], prior_range[1], 'g', linewidth=linewidth)
         #plt.xlim((np.min(tgts), np.max(tgts)))
         #plt.ylim((0, plt.gca().get_ylim()[1]))
         return t, p
-    
+
     def plotConditionalForSample(self, sample,
                                  conditional_input_idx=-1,
                                  target_range=None,
-                                 res = 300):
+                                 res = 300,
+                                 c_transform=None,
+                                 tgt_transform=None,
+                                 pC=None):
         """
         Plot a conditional probability distribution P(y|C). The index of the
         conditional variable can be set with conditional_input_idx and defaults 
         to the last input (-1).
+        If pC is a length N array, P(y|C)*P(C)=P(y,C) is plotted instead.
         """
+        inputs = self.ds.getField('input')[:,conditional_input_idx]
+        targets = self.tgts
+        
         if target_range==None:
-            target_range=[np.min(self.tgts), np.max(self.tgts)]
+            target_range=[np.min(targets), np.max(targets)]
         t = np.linspace(target_range[0], target_range[1], res)
-        c_range = [np.min(self.ds.getField('input')[:,conditional_input_idx]),
-                   np.max(self.ds.getField('input')[:,conditional_input_idx])]
+        c_range = [np.min(inputs), np.max(inputs)]
         c = np.linspace(c_range[0], c_range[1], res)
-        p = np.zeros([len(c), len(t)])
+
         inp = self.ds.getSample(sample)[0]
         tgt = self.ds.getSample(sample)[1]
         
-#        if transform:
-#            C = self.linTransform(C, transform['mean'], transform['scale'])
+        p = np.zeros([len(c), len(t)])
+
         for ci in range(len(c)):
             x = inp.copy()
             x[conditional_input_idx] = c[ci]
             p[ci,:] = self.getPosterior(x[None, :], t)[0]
+
+        
+        if pC is not None:
+            p *= pC[:, None]
+
+        if c_transform is not None:
+            tmp = self.linTransform(inputs.copy(), c_transform['mean'], 
+                                       c_transform['scale'])
+            c_range = [np.min(tmp), np.max(tmp)]
+            inp = inp*c_transform['scale'] + c_transform['mean']
+            
+        if tgt_transform is not None:
+            tmp = self.linTransform(targets.copy(), tgt_transform['mean'], 
+                                        tgt_transform['scale'])
+            target_range=[np.min(tmp), np.max(tmp)]
+            tgt = tgt*tgt_transform['scale'] + tgt_transform['mean']
         
         plt.imshow(p.T, origin='lower', 
                    extent=[c_range[0], c_range[1], 
@@ -99,27 +125,33 @@ class MDNPlotter():
                    aspect=(c_range[1] - c_range[0]) / (target_range[1] - target_range[0]), 
                    interpolation='none')
         plt.gca().set_xlim([c_range[0], c_range[1]])
+        plt.gca().set_ylim([target_range[0], target_range[1]])
         plt.plot(inp[conditional_input_idx], tgt, 'D', 
                  markersize=10,
                  markerfacecolor='red', 
                  markeredgecolor='black', 
                  markeredgewidth=1)
-        
         return p.T
-        
+    
+    def plotInformationGainDistribution(self):
+        dkl = self.getInformationGain()
+        plt.hist(dkl, 50)
+        plt.xlabel('nats')
 
     def getPosterior(self, x, t):
-        p = []
-        if len(t.shape) == 1:
-            t = t[:, None]
-        if len(x.shape) == 1:
-            x = x[:, None]
-        for xi in range(len(x)):
-            y = self.module.activate(x[xi])
-            alpha, sigma, mu = self.module.getMixtureParams(y)
-            tmp = self._p(t, alpha, mu, sigma)
-            p.append(tmp)
-        return np.array(p)
+        if self.p == None:
+            self.p = []
+            if len(t.shape) == 1:
+                t = t[:, None]
+            if len(x.shape) == 1:
+                x = x[:, None]
+            for xi in range(len(x)):
+                y = self.module.activate(x[xi])
+                alpha, sigma, mu = self.module.getMixtureParams(y)
+                tmp = self._p(t, alpha, mu, sigma)
+                self.p.append(tmp)
+            self.p = np.array(self.p)
+        return self.p
 
     
     def plotCenters(self, center = None, transform = None, interactive=False,
@@ -252,7 +284,6 @@ class MDNPlotter():
             plt.cla()
             mdnplt.plot1DMixtureForSample(event, show_target_dist=True, 
                                           show_uniform_prior=True)
-
         
         mdnplt = MDNPlotter(self.module, self.ds)
         
@@ -260,3 +291,25 @@ class MDNPlotter():
         mdnplt.plotCenters()
         f=plt.gcf()
         f.canvas.mpl_connect('pick_event', updatePlot)
+
+    def getInformationGain(self, sample=None, nbins=500):
+        """
+        Estimate the information gain for every pattern in the dataset. The
+        information gain is defined as the Kullback-Leibler divergence between
+        prior and posterior distribution.
+        """
+        eps = np.finfo('float').eps
+        prior, x = np.histogram(self.tgts, nbins, density=True)
+        dx = np.abs(x[1]-x[0])
+        #import pdb; pdb.set_trace()
+        if sample==None:
+            posterior = self.getPosterior(self.ds.getField('input'), x)[:,:-1]
+        else:
+            alpha, sigma, mu = self.module.getMixtureParams(self.y[sample])
+            posterior = self._p(x[:-1, None], alpha, mu, sigma)[None, :]
+        return np.sum(np.where(prior > eps, 
+                               posterior * np.log(posterior/(prior+eps)) * dx, 
+                               0), 
+                      axis=1)
+
+        

@@ -9,6 +9,7 @@ from IPython.parallel import Client
 from IPython.parallel.util import interactive
 from arac.pybrainbridge import _Network
 from arac.cppbridge import MDNTrainer as CMDNTrainer
+from pybrain.structure.modules import TanhLayer, BiasUnit
 
 class MDNTrainer(SCGTrainer):
     """Minimise a mixture density error function using a scaled conjugate gradient
@@ -20,45 +21,72 @@ class MDNTrainer(SCGTrainer):
     """
     _cmdntrainer = None
     
-    def initNetworkWeights(self, sigma0=1.0, scaled_prior=True):
+    def initNetworkWeights(self, sigma0=None, init_input_layer=True):
         """
-        initialize weights and biases so that the network models the unconditional density
-        of the target data p(t)
-        t: target data
+        Initialize weights and biases so that the network models the unconditional 
+        density of the target data.
+        
+        The initial weights and input layer biases are drawn from a Gaussian 
+        distribution with standard deviation sigma0 (if provided) or a standard 
+        deviation scaled to the number of input / hidden layer units.
+        Initial output biases are set according to a kmeans clustering of the
+        training data. 
+        
+        @param sigma0:           standard deviation for weights and input layer biases.
+        @param init_input_layer: if True (default), input layer weights and biases
+                                 are initialized.
         """
         from scipy.cluster.vq import kmeans2, kmeans
         from scipy.spatial.distance import cdist
+        
+        layers = [i for i in self.module.modulesSorted 
+                  if not isinstance(i, BiasUnit)]
 
         t = []
         for k in range(self.ds.getLength()):
             t.append(self.ds.getSample(k)[1])
         t = np.array(t)
 
-        if scaled_prior:
-            #self.w1 = np.random.normal(loc=0.0, scale = 1,size=[H, d+1])/np.sqrt(d+1) # 1st layer weights + bias
-            #self.w2 = np.random.normal(loc=0.0, scale = 1,size=[ny, H+1])/np.sqrt(H+1) # 2nd layer weights + bias
+        if not sigma0:
             sigma1 = 1.0/np.sqrt(self.module.indim+1)
-            sigma2 = 1.0/np.sqrt(self.module['h'].indim+1)
+            sigma2 = 1.0/np.sqrt(layers[-2].indim+1)
         else:
-            # init weights from gaussian with width given by prior
             sigma1 = sigma0
             sigma2 = sigma0
 
         # init connection weights
-        conn_i_h = self.module.connections[self.module['i']][0]
-        conn_h_o = self.module.connections[self.module['h']][0]
-        size_i = conn_i_h.paramdim
-        size_h = conn_h_o.paramdim
-        conn_i_h.params[:] = np.random.normal(loc=0.0, scale = sigma1,size=size_i)
-        conn_h_o.params[:] = np.random.normal(loc=0.0, scale = sigma2,size=size_h)
-
-        # init biases (adapted from netlab, gmminit.m)
-        # TODO: here we assume that the first bias connection is always bias->h, the second bias->o
-        conn_b_h = self.module.connections[self.module['bias']][0]
-        conn_b_o = self.module.connections[self.module['bias']][1]
+        if init_input_layer:
+            conn_i_h = self.module.connections[layers[0]][0]
+            size_i = conn_i_h.paramdim
+            conn_i_h.params[:] = np.random.normal(loc=0.0, scale = sigma1, 
+                                                  size=size_i)
         
-	# added minit="points", since this seems to give better results, with minit="random" kmeans sometimes returns
-	# centroids outside target range
+        conn_h_o = self.module.connections[layers[-2]][0]        
+        size_h = conn_h_o.paramdim
+        conn_h_o.params[:] = np.random.normal(loc=0.0, scale = sigma2,
+                                              size=size_h)
+        
+        ##############################################
+        # init biases (adapted from netlab, gmminit.m)
+        ##############################################
+        # sort bias connections
+        bias_unit = [i for i in self.module.modulesSorted 
+                     if isinstance(i, BiasUnit)][0]
+        biascons = [c for c in self.module.connections[bias_unit]] 
+        biascons.sort(key=lambda c: layers.index(c.outmod))
+        
+        if init_input_layer:
+            # first layer biases are only initialized if input layer weights are
+            # initialized as well
+            biascons[0].params[:] = np.random.normal(loc=0.0, scale = sigma1,
+                                                     size=biascons[0].paramdim)
+
+        # init output layer biases using the kmeans clustering algorithm
+        conn_b_o = biascons[-1]
+        
+        # added minit="points", since this seems to give better results, 
+        # since minit="random" sometimes gives centroids outside the 
+        # target range
         [centroid, label] = kmeans2(t, self.module.M, minit='points')
         cluster_sizes = np.maximum(np.bincount(label), 1) # avoid empty clusters
         alpha = cluster_sizes.astype('float64')/np.sum(cluster_sizes)
@@ -78,8 +106,9 @@ class MDNTrainer(SCGTrainer):
         print sigma
         print "Centers:"
         print centroid
-        conn_b_h.params[:] = np.random.normal(loc=0.0, scale = sigma1,size=conn_b_h.paramdim)
-        conn_b_o.params[:] = np.reshape([alpha, np.log(sigma), centroid], conn_b_o.params.shape)
+        
+        conn_b_o.params[:] = np.reshape([alpha, np.log(sigma), centroid], 
+                                        conn_b_o.params.shape)
 
     def setData(self, dataset):
         """Associate the given dataset with the trainer."""
@@ -126,7 +155,7 @@ class MDNTrainer(SCGTrainer):
         return 1 * trainer.module.derivs
     
     def getFastTrainer(self, testset=None):
-        assert isinstance(self.module, _Network)
+        assert isinstance(self.module, _Network), "A fast network is required. Call MDN.convertToFast() first."
         if not self._cmdntrainer:
             if testset==None:
                 self._cmdntrainer = CMDNTrainer(self.module.proxies.map[self.module], 

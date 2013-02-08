@@ -16,7 +16,7 @@ class MDNDataSet(SupervisedDataSet):
         self.tgt_transform=tgt_transform
 
     def __reduce__(self):
-        # not sure why that is overwritten in SequentialDataSet
+        # not sure why this is overwritten in SequentialDataSet
         # But we have to include additional arguments to __init__ in
         # order to make deepcopy work
         _, _, state, _, _ = super(SupervisedDataSet, self).__reduce__()
@@ -37,3 +37,10 @@ class MDNDataSet(SupervisedDataSet):
                 sample = self.getSample(k)
                 self._cdataset.append(sample[0], sample[1])
         return self._cdataset
+    
+    def appendDataset(self, dataset):
+        """
+        Append the given dataset.
+        """
+        for inp, tgt in dataset:
+            self.addSample(inp, tgt)
