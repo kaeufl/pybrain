@@ -18,7 +18,7 @@ class BFGSTrainer(Trainer):
     argument, than being implemented here.
     """
 
-    def __init__(self, module, ds_train=None, ds_test=None, gtol = 1e-05, norm = inf, 
+    def __init__(self, module, ds_train=None, ds_val=None, gtol = 1e-05, norm = inf, 
                  verbose = False, **kwargs):
         """
         Create a BFGSTrainer to train the specified `module` on the
@@ -26,7 +26,7 @@ class BFGSTrainer(Trainer):
         """
         Trainer.__init__(self, module)
         self.setData(ds_train)
-        self.ds_test = ds_test
+        self.ds_val = ds_val
         self.verbose = verbose
         self.epoch = 0
         self.totalepochs = 0
@@ -43,7 +43,7 @@ class BFGSTrainer(Trainer):
         self.module.resetDerivatives()
         
         def updateStatus(params):
-            test_error = self.ds_test.evaluateModuleMSE(self.module)
+            test_error = self.ds_val.evaluateModuleMSE(self.module)
             if self.epoch > 0 and test_error <= amin(self.test_errors):
                 self.optimal_params = self.module.params.copy()
                 self.optimal_epoch = self.epoch

@@ -5,35 +5,89 @@ import matplotlib.pyplot as plt
 from matplotlib import mpl
 from scipy.stats import cumfreq
 from pybrain.auxiliary import mdn
-from nnutil.preprocessing import center, standardize, whiten
+from pybrain.structure.networks.mdn import PeriodicMixtureDensityNetwork
+#from nnutil.preprocessing import center, standardize, whiten
 
 class MDNPlotter():
     def __init__(self, module, ds):
         self.module = module
         self.ds = ds
-        self.update()
+        self.y = None
+#        self.update()
+        self.p = None
         self.tgts = ds.getTargets()
 
     def update(self):
         self.y = self.module.activateOnDataset(self.ds)
-        self.p = None
-
-    def _p(self, t, alpha, mu, sigma):
-        return np.sum(alpha * mdn.phi(t, mu, sigma, self.module.c), axis = 1)
+        #self.p = None
 
     def linTransform(self, x, mu, scale):
         return x*scale+mu
 
-    def plot1DMixture(self, t, alpha, mu, sigma, target = None, linewidth = 2.0):
+#    def plot1DMixture(self, t, alpha, mu, sigma, target = None, linewidth = 2.0):
+#        if t.ndim == 1:
+#            t = t[:, None]
+#        #p=self._p(t, alpha, mu, sigma)
+#        p=self.module._p(t, alpha, mu, sigma)
+#        plt.plot(t, p, linewidth=linewidth)
+#        if target:
+#            plt.vlines(target, np.max(p), 0, linewidth=linewidth)
+##            plt.vlines(target, plt.gca().get_ylim()[0], plt.gca().get_ylim()[1],
+##                       linewidth=linewidth)
+#        return p
+    
+    def plot1DMixture(self, x, t, target = None, linewidth = 2.0, 
+                      transform=None):
         if t.ndim == 1:
             t = t[:, None]
-        p=self._p(t, alpha, mu, sigma)
+        p = self.module.getPosterior(x, t)
+        if transform:
+            Dt0 = np.max(t) - np.min(t)
+            t = self.linTransform(t, transform['mean'], transform['scale'])
+            p /= (np.max(t) - np.min(t))/Dt0
         plt.plot(t, p, linewidth=linewidth)
         if target:
+            if transform:
+                target = self.linTransform(target, transform['mean'], 
+                                           transform['scale'])
             plt.vlines(target, np.max(p), 0, linewidth=linewidth)
-#            plt.vlines(target, plt.gca().get_ylim()[0], plt.gca().get_ylim()[1],
-#                       linewidth=linewidth)
         return p
+
+#    def plot1DMixtureForSample(self, sample, transform=None,
+#                               show_target_dist=False,
+#                               show_uniform_prior=False,
+#                               prior_range=None,
+#                               linewidth=2.0,
+#                               res=300,
+#                               target_dist_line_style='g:',
+#                               target_dist_linewidth=0.5):
+#        alpha, sigma, mu = self.module.getMixtureParams(self.y[sample])
+#        tgts = self.tgts
+#        if transform:
+#            sigma = sigma*transform['scale']**2
+#            mu = self.linTransform(mu, transform['mean'], transform['scale'])
+#            tgts = self.linTransform(tgts, transform['mean'], transform['scale'])
+#            if prior_range:
+#                prior_range = self.linTransform(prior_range, transform['mean'],
+#                        transform['scale'])
+#        if prior_range==None:
+#            prior_range=[np.min(tgts), np.max(tgts)]
+#        
+#        t = np.linspace(prior_range[0], prior_range[1], res)
+#        #if np.log10(np.max(t)) > 15:
+#            
+#        p = self.plot1DMixture(t, alpha, mu, sigma, tgts[sample], linewidth)
+#            
+#        if show_target_dist:
+#            [h, edges] = np.histogram(tgts, res, normed=True,
+#                                      range=(np.min(tgts), np.max(tgts)))
+#            plt.plot(edges[1:], h, target_dist_line_style)
+#        if show_uniform_prior:
+#            yprior = 1./(prior_range[1]-prior_range[0])
+#            plt.hlines(yprior, prior_range[0], prior_range[1], 'g', linewidth=linewidth)
+#        #plt.xlim((np.min(tgts), np.max(tgts)))
+#        #plt.ylim((0, plt.gca().get_ylim()[1]))
+#        return t, p
 
     def plot1DMixtureForSample(self, sample, transform=None,
                                show_target_dist=False,
@@ -43,32 +97,26 @@ class MDNPlotter():
                                res=300,
                                target_dist_line_style='g:',
                                target_dist_linewidth=0.5):
-        alpha, sigma, mu = self.module.getMixtureParams(self.y[sample])
         tgts = self.tgts
-        if transform:
-            sigma = sigma*transform['scale']**2
-            mu = self.linTransform(mu, transform['mean'], transform['scale'])
-            tgts = self.linTransform(tgts, transform['mean'], transform['scale'])
-            if prior_range:
-                prior_range = self.linTransform(prior_range, transform['mean'],
-                        transform['scale'])
         if prior_range==None:
             prior_range=[np.min(tgts), np.max(tgts)]
-        
         t = np.linspace(prior_range[0], prior_range[1], res)
-        #if np.log10(np.max(t)) > 15:
-            
-        p = self.plot1DMixture(t, alpha, mu, sigma, tgts[sample], linewidth)
-            
+        smpl = self.ds.getSample(sample)
+        p = self.plot1DMixture(smpl[0], t, smpl[1], linewidth, 
+                               transform=transform)
         if show_target_dist:
+            if transform:
+                tgts = self.linTransform(tgts, transform['mean'], transform['scale'])
             [h, edges] = np.histogram(tgts, res, normed=True,
                                       range=(np.min(tgts), np.max(tgts)))
             plt.plot(edges[1:], h, target_dist_line_style)
         if show_uniform_prior:
+            if transform:
+                prior_range = self.linTransform(prior_range, transform['mean'],
+                                                transform['scale'])
             yprior = 1./(prior_range[1]-prior_range[0])
             plt.hlines(yprior, prior_range[0], prior_range[1], 'g', linewidth=linewidth)
-        #plt.xlim((np.min(tgts), np.max(tgts)))
-        #plt.ylim((0, plt.gca().get_ylim()[1]))
+        
         return t, p
 
     def plotConditionalForSample(self, sample,
@@ -138,42 +186,74 @@ class MDNPlotter():
         plt.hist(dkl, 50)
         plt.xlabel('nats')
 
+#    def getPosterior(self, x, t):
+#        if self.p == None:
+#            self.p = []
+#            if len(t.shape) == 1:
+#                t = t[:, None]
+#            if len(x.shape) == 1:
+#                x = x[:, None]
+#            for xi in range(len(x)):
+#                y = self.module.activate(x[xi])
+#                alpha, sigma, mu = self.module.getMixtureParams(y)
+#                #tmp = self._p(t, alpha, mu, sigma)
+#                tmp = self.module._p(t, alpha, mu, sigma)
+#                self.p.append(tmp)
+#            self.p = np.array(self.p)
+#        return self.p
+
     def getPosterior(self, x, t):
-        if self.p == None:
+        if t.ndim == 1:
+            t = t[:, None]
+        if x.ndim == 1:
+            return self.module.getPosterior(x, t)
+        elif x.ndim==2 and self.p == None:
             self.p = []
-            if len(t.shape) == 1:
-                t = t[:, None]
-            if len(x.shape) == 1:
-                x = x[:, None]
             for xi in range(len(x)):
-                y = self.module.activate(x[xi])
-                alpha, sigma, mu = self.module.getMixtureParams(y)
-                tmp = self._p(t, alpha, mu, sigma)
-                self.p.append(tmp)
+                self.p.append(self.module.getPosterior(x[xi], t))
             self.p = np.array(self.p)
         return self.p
-
     
     def plotCenters(self, center = None, transform = None, interactive=False,
-                    colors=None, size=20, plot_all_centers=False, square=True,
-                    rasterized=False):
+                    colors=None, size=20, plot_all_centers=False, square=False,
+                    rasterized=False, minimum_gain=None, show_colorbar=False):
         """
         Plot true vs. predicted posterior means.
-        @param center:      plot the specified kernel
-        @param transform:   apply the specified linear transformation. Transform is
-                            a dict of the form {'mean' : float, 'scale' : float}
-        @param interactive: allow interactive selection of samples by clicking in the plot window
-        @param colors:      list of colors: must be of the same length as the number of patterns in the dataset
-                            or 'alpha': the alpha value of the specified kernel is shown on the color-axis 
-        @param size:        size of the dots in scatter plot
+        @param center:           plot the specified kernel
+        @param transform:        apply the specified linear transformation. Transform is
+                                 a dict of the form {'mean' : float, 'scale' : float}
+        @param interactive:      allow interactive selection of samples by clicking in the plot window
+        @param colors:           list of colors: must be of the same length as the number of patterns in the dataset
+                                 or one of: 
+                                 - 'alpha': the alpha value of the specified kernel is shown on the color-axis
+                                 - 'gain': the information gain (kl distance) of the according distribution                                     
+        @param size:             size of the dots in scatter plot
         @param plot_all_centers: plot all kernels and plot alpha on the color-axis
+        @param minimum_gain:     Discard patterns with an information gain below threshold.
         """
+        if self.y == None:
+            self.update() 
         alpha, sigma, mu = mdn.getMixtureParams(self.y, self.module.M, self.module.c)
-
         tgts = self.tgts
+        if isinstance(self.module, PeriodicMixtureDensityNetwork):
+            while np.any(mu > np.max(tgts)):
+                mu[mu > np.max(tgts)] -= 2*np.pi
+            while np.any(mu < np.min(tgts)):
+                mu[mu < np.min(tgts)] += 2*np.pi
         if transform:
             mu = self.linTransform(mu, transform['mean'], transform['scale'])
             tgts = self.linTransform(tgts, transform['mean'], transform['scale'])
+        
+        dKL = None
+        if minimum_gain:
+            dKL = self.getInformationGain()
+            idxs = dKL > minimum_gain
+            alpha = alpha[idxs]
+            sigma = sigma[idxs]
+            mu = mu[idxs]
+            tgts = tgts[idxs]
+            dKL = dKL[idxs]
+        
         if center != None:
             mu = mu[:, center]
         elif plot_all_centers==False:
@@ -204,6 +284,15 @@ class MDNPlotter():
                         cmap=cmap, edgecolor='none',
                         rasterized=rasterized
             )
+        elif colors=='gain':
+            cmap = mpl.colors.LinearSegmentedColormap.from_list('tmp', 
+                                                                [[.8,.8,.8],[0,0,0]])
+            if dKL is None:
+                dKL = self.getInformationGain()
+            plt.scatter(mu, tgts, picker=interactive, c=dKL, s=size, 
+                        cmap=cmap, edgecolor='none',
+                        rasterized=rasterized
+            )
         elif colors is not None:
             plt.scatter(mu, tgts, picker=interactive, c=colors, s=size, 
                         edgecolor='none',
@@ -217,6 +306,9 @@ class MDNPlotter():
         if interactive:
             f=plt.gcf()
             f.canvas.mpl_connect('pick_event', MDNPlotter.scatterPick)
+            
+        if show_colorbar:
+            plt.colorbar()
         plt.xlabel('Prediction')
         plt.ylabel('Target')
         
@@ -258,6 +350,8 @@ class MDNPlotter():
         TODO: Use the true mode rather than the kernel with the largest mixing
         coefficient.
         """
+        if self.y == None:
+            self.update()
         alpha, sigma, mu = mdn.getMixtureParams(self.y, self.module.M, self.module.c)
         #maxidxs = np.argmax(alpha, axis=1)
         maxidxs=self.getMaxKernel(alpha, sigma)
@@ -299,17 +393,15 @@ class MDNPlotter():
         prior and posterior distribution.
         """
         eps = np.finfo('float').eps
-        prior, x = np.histogram(self.tgts, nbins, density=True)
-        dx = np.abs(x[1]-x[0])
-        #import pdb; pdb.set_trace()
+        prior, t = np.histogram(self.tgts, nbins, density=True)
+        dt = np.abs(t[1]-t[0])
         if sample==None:
-            posterior = self.getPosterior(self.ds.getField('input'), x)[:,:-1]
+            posterior = self.getPosterior(self.ds.getField('input'), t)[:,:-1]
         else:
-            alpha, sigma, mu = self.module.getMixtureParams(self.y[sample])
-            posterior = self._p(x[:-1, None], alpha, mu, sigma)[None, :]
+            posterior = self.getPosterior(self.ds.getField('input')[sample], t)[None, :-1]        
         return np.sum(np.where(prior > eps, 
-                               posterior * np.log(posterior/(prior+eps)) * dx, 
+                               posterior * np.log(posterior/(prior+eps)) * dt, 
                                0), 
                       axis=1)
 
-        
+    

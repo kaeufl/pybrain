@@ -9,9 +9,21 @@ class MDNDataSet(SupervisedDataSet):
     _cdataset = None
     
     def __init__(self, inp, target, M, inp_transform=None, tgt_transform=None):
+        """
+        Initialize an MDN dataset.
+        @param inp: int or np.array, input data or input dimension
+        @param target: int or np.array, target data or target dimension
+        @param M: number of Gaussian kernels #TODO: remove this from dataset!
+        @param inp_transform: set of input transformations that have been
+        applied to the dataset #TODO: remove
+        @param tgt_transform: #TODO: remove
+        """
         SupervisedDataSet.__init__(self, inp, target)
         self.M = M
-        self.c = target
+        if np.isscalar(target):
+            self.c = target
+        else:
+            self.c = target.shape[1]
         self.inp_transform=inp_transform
         self.tgt_transform=tgt_transform
 

@@ -2,22 +2,19 @@ __author__ = 'Paul Kaeufl, kaeufl@geo.uu.nl'
 
 import numpy as np
 from scg import SCGTrainer
-from time import time
+#from time import time
 from copy import copy
 from itertools import islice
 from IPython.parallel import Client
 from IPython.parallel.util import interactive
-from arac.pybrainbridge import _Network
-from arac.cppbridge import MDNTrainer as CMDNTrainer
-from pybrain.structure.modules import TanhLayer, BiasUnit
+from arac.pybrainbridge import _Network, _PeriodicMixtureDensityNetwork
+from arac.cppbridge import FastMDNTrainer, FastPeriodicMDNTrainer
+from pybrain.structure.modules import BiasUnit
 
 class MDNTrainer(SCGTrainer):
     """Minimise a mixture density error function using a scaled conjugate gradient
     algorithm.
     For details on the function of the Mixture Density Network see Bishop, 1995.
-
-    TODO: This can be considered as a workaround. The error function should really
-    not be part of the trainer or the network.
     """
     _cmdntrainer = None
     
@@ -88,8 +85,8 @@ class MDNTrainer(SCGTrainer):
         # since minit="random" sometimes gives centroids outside the 
         # target range
         [centroid, label] = kmeans2(t, self.module.M, minit='points')
-        cluster_sizes = np.maximum(np.bincount(label), 1) # avoid empty clusters
-        alpha = cluster_sizes.astype('float64')/np.sum(cluster_sizes)
+        cluster_sizes = np.maximum(np.bincount(label, minlength=self.module.M), 1) # avoid empty clusters
+        alpha = cluster_sizes.astype('float64') / np.sum(cluster_sizes)
         if (self.module.M > 1):
             # estimate variance from the distance to the nearest centre
             sigma = cdist(centroid, centroid)
@@ -132,7 +129,6 @@ class MDNTrainer(SCGTrainer):
                 error += trainer.module.getError(y, target)
         trainer._last_err = error
         trainer.module._setParameters(oldparams)
-        #print "f took %.6f" % (time()-t0)
         return error
 
     @staticmethod
@@ -152,18 +148,23 @@ class MDNTrainer(SCGTrainer):
                 trainer.module.backActivate(outerr)
         trainer.module._setParameters(oldparams)
         #print "df took %.6f" % (time()-t0)
+        #print trainer.module.derivs
         return 1 * trainer.module.derivs
     
-    def getFastTrainer(self, testset=None):
+    def getFastTrainer(self, validation_set=None):
         assert isinstance(self.module, _Network), "A fast network is required. Call MDN.convertToFast() first."
+        if isinstance(self.module, _PeriodicMixtureDensityNetwork):
+            CMDNTrainer = FastPeriodicMDNTrainer
+        else:
+            CMDNTrainer = FastMDNTrainer
         if not self._cmdntrainer:
-            if testset==None:
+            if validation_set==None:
                 self._cmdntrainer = CMDNTrainer(self.module.proxies.map[self.module], 
                                                 self.ds.getFastDataset())
             else:
                 self._cmdntrainer = CMDNTrainer(self.module.proxies.map[self.module], 
                                                 self.ds.getFastDataset(),
-                                                testset.getFastDataset())
+                                                validation_set.getFastDataset())
         return self._cmdntrainer
 
 #    @staticmethod
