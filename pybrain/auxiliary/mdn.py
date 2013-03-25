@@ -29,9 +29,9 @@ def getError(Y, T, M, c):
     tmp = -np.log(tmp)
     return np.sum(tmp) / Y.shape[0]
 
-def phi(T, mu, sigma, c):
+def phi(T, mu, sigma2, c):
     dist = np.sum((T[:,None,:]-mu)**2, axis=2)
-    tmp = np.exp(- 1.0 * dist / (2 * sigma))
+    tmp = np.exp(- 1.0 * dist / (2 * sigma2))
     tmp[tmp < np.finfo('float64').eps] = np.finfo('float64').eps
-    tmp *= (1.0 / (2*np.pi*sigma)**(0.5*c))
+    tmp *= (1.0 / (2*np.pi*sigma2)**(0.5*c))
     return np.maximum(tmp, np.finfo(float).eps)

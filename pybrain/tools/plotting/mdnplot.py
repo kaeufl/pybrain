@@ -37,7 +37,7 @@ class MDNPlotter():
 #        return p
     
     def plot1DMixture(self, x, t, target = None, linewidth = 2.0, 
-                      transform=None):
+                      linestyle='k-', transform=None):
         if t.ndim == 1:
             t = t[:, None]
         p = self.module.getPosterior(x, t)
@@ -45,7 +45,7 @@ class MDNPlotter():
             Dt0 = np.max(t) - np.min(t)
             t = self.linTransform(t, transform['mean'], transform['scale'])
             p /= (np.max(t) - np.min(t))/Dt0
-        plt.plot(t, p, linewidth=linewidth)
+        plt.plot(t, p, linestyle, linewidth=linewidth)
         if target:
             if transform:
                 target = self.linTransform(target, transform['mean'], 
@@ -94,6 +94,7 @@ class MDNPlotter():
                                show_uniform_prior=False,
                                prior_range=None,
                                linewidth=2.0,
+                               linestyle='k-',
                                res=300,
                                target_dist_line_style='g:',
                                target_dist_linewidth=0.5):
@@ -103,6 +104,7 @@ class MDNPlotter():
         t = np.linspace(prior_range[0], prior_range[1], res)
         smpl = self.ds.getSample(sample)
         p = self.plot1DMixture(smpl[0], t, smpl[1], linewidth, 
+                               linestyle=linestyle, 
                                transform=transform)
         if show_target_dist:
             if transform:
@@ -338,7 +340,8 @@ class MDNPlotter():
         return np.argmax(alpha/np.sqrt(sigma)**self.module.c, axis=1)
         
 
-    def plotRECCurve(self, nbins=20, highlight_error=None):
+    def plotRECCurve(self, nbins=20, highlight_error=None, linestyle='-',
+                     linewidth=1.0):
         """
         Plot a Regression Error Characteristic (REC) curve.
 
@@ -352,17 +355,17 @@ class MDNPlotter():
         """
         if self.y == None:
             self.update()
-        alpha, sigma, mu = mdn.getMixtureParams(self.y, self.module.M, self.module.c)
+        alpha, sigma2, mu = mdn.getMixtureParams(self.y, self.module.M, self.module.c)
         #maxidxs = np.argmax(alpha, axis=1)
-        maxidxs=self.getMaxKernel(alpha, sigma)
+        maxidxs=self.getMaxKernel(alpha, sigma2)
         N=len(mu)
         mu = mu[np.arange(0,N), maxidxs]
-        sigma = sigma[np.arange(0,N), maxidxs]
+        sigma2 = sigma2[np.arange(0,N), maxidxs]
         dist = np.sum(np.abs(mu-self.tgts), axis=1)
-        dist /= sigma
-        h,_,_,_ = cumfreq(dist, nbins)
+        dist /= np.sqrt(sigma2)
+        h,_,_,_ = cumfreq(dist, nbins,[0,10])
         h/=N
-        plt.plot(h)
+        plt.plot(np.linspace(0,10,nbins), h, linestyle, linewidth=linewidth)
         if highlight_error:
             plt.vlines(highlight_error, 0, 1, linestyles='-.')
         plt.xlabel('$\epsilon$ [n std deviations]')

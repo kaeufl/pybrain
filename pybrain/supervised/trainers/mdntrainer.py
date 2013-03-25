@@ -33,7 +33,7 @@ class MDNTrainer(SCGTrainer):
         @param init_input_layer: if True (default), input layer weights and biases
                                  are initialized.
         """
-        from scipy.cluster.vq import kmeans2, kmeans
+        from scipy.cluster.vq import kmeans2
         from scipy.spatial.distance import cdist
         
         layers = [i for i in self.module.modulesSorted 

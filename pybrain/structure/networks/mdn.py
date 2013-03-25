@@ -5,7 +5,36 @@ from pybrain.structure.networks import FeedForwardNetwork
 from pybrain.structure import LinearLayer, TanhLayer, \
                               BiasUnit, FullConnection
 
-class MixtureDensityNetwork(FeedForwardNetwork):
+class MixtureDensityMixin(object):
+    def _phi(self, T, mu, sigma):
+        if T.ndim == 1:
+            T = T[None,:]
+        dist = np.sum((T[:,None,:]-mu[None,:,:])**2, axis=2)
+        tmp = np.exp(- 1.0 * dist / (2 * sigma))
+        tmp[tmp < np.finfo('float64').eps] = np.finfo('float64').eps
+        tmp *= (1.0 / (2*np.pi*sigma)**(0.5*self.c))
+        return np.maximum(tmp, np.finfo(float).eps)
+    
+    def getPosterior(self, x, t):
+        y = self.activate(x)
+        alpha, sigma, mu = self.getMixtureParams(y)
+        return self._p(t, alpha, mu, sigma)
+
+    def getError(self, y, t):
+        alpha, sigma, mu = self.getMixtureParams(y)
+        #phi = self._phi(t, mu, sigma)
+        #tmp = np.maximum(np.sum(alpha * phi, 1), np.finfo(float).eps)
+        tmp = np.maximum(self._p(t, alpha, mu, sigma), np.finfo(float).eps)
+        return -np.log(tmp)
+    
+    def getDatasetError(self, dataset):
+        Y = self.activateOnDataset(dataset)
+        err = 0
+        for k,y in enumerate(Y):
+            err += self.getError(y, dataset.getSample(k)[1])
+        return err / dataset.getLength()
+
+class MixtureDensityNetwork(FeedForwardNetwork, MixtureDensityMixin):
     """
     Mixture density network
     """
@@ -28,21 +57,7 @@ class MixtureDensityNetwork(FeedForwardNetwork):
     def _p(self, t, alpha, mu, sigma):
         phi = self._phi(t, mu, sigma)
         return np.sum(alpha * phi, axis = 1)
-
-    def _phi(self, T, mu, sigma):
-        if T.ndim == 1:
-            T = T[None,:]
-        dist = np.sum((T[:,None,:]-mu[None,:,:])**2, axis=2)
-        tmp = np.exp(- 1.0 * dist / (2 * sigma))
-        tmp[tmp < np.finfo('float64').eps] = np.finfo('float64').eps
-        tmp *= (1.0 / (2*np.pi*sigma)**(0.5*self.c))
-        return np.maximum(tmp, np.finfo(float).eps)
     
-    def getPosterior(self, x, t):
-        y = self.activate(x)
-        alpha, sigma, mu = self.getMixtureParams(y)
-        return self._p(t, alpha, mu, sigma)
-
     def softmax(self, x):
         return np.exp(x) / np.sum(np.exp(x), axis = 0)
 
@@ -53,12 +68,6 @@ class MixtureDensityNetwork(FeedForwardNetwork):
         sigma = np.maximum(sigma, np.finfo(float).eps)
         mu = np.reshape(y[2*self.M:], (self.M, self.c))
         return alpha, sigma, mu
-
-    def getError(self, y, t):
-        alpha, sigma, mu = self.getMixtureParams(y)
-        phi = self._phi(t, mu, sigma)
-        tmp = np.maximum(np.sum(alpha * phi, 0), np.finfo(float).eps)
-        return -np.log(tmp)
 
     def getOutputError(self, y, t):
         alpha, sigma, mu = self.getMixtureParams(y)
@@ -131,14 +140,14 @@ class PeriodicMixtureDensityNetwork(MixtureDensityNetwork):
             phi += self._phi(t+l*2*np.pi, mu, sigma)
         return np.sum(alpha * phi, axis = 1)
     
-    def getError(self, y, t):
-        alpha, sigma, mu = self.getMixtureParams(y)
-        phi = np.zeros([self.M])
-        for l in range(-self.nperiods,self.nperiods+1):
-            phi += self._phi(t+l*2*np.pi, mu, sigma)
-        tmp = np.maximum(np.sum(alpha * phi, 0), np.finfo(float).eps)
-        self.hist_errors.append(-np.log(tmp))
-        return -np.log(tmp)
+#    def getError(self, y, t):
+#        alpha, sigma, mu = self.getMixtureParams(y)
+#        phi = np.zeros([self.M])
+#        for l in range(-self.nperiods,self.nperiods+1):
+#            phi += self._phi(t+l*2*np.pi, mu, sigma)
+#        tmp = np.maximum(np.sum(alpha * phi, 0), np.finfo(float).eps)
+#        self.hist_errors.append(-np.log(tmp))
+#        return -np.log(tmp)
     
     def getOutputError(self, y, t):
         alpha, sigma, mu = self.getMixtureParams(y)
