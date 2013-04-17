@@ -37,7 +37,7 @@ class MDNPlotter():
 #        return p
     
     def plot1DMixture(self, x, t, target = None, linewidth = 2.0, 
-                      linestyle='k-', transform=None):
+                      linestyle='-', color='k', transform=None):
         if t.ndim == 1:
             t = t[:, None]
         p = self.module.getPosterior(x, t)
@@ -45,7 +45,7 @@ class MDNPlotter():
             Dt0 = np.max(t) - np.min(t)
             t = self.linTransform(t, transform['mean'], transform['scale'])
             p /= (np.max(t) - np.min(t))/Dt0
-        plt.plot(t, p, linestyle, linewidth=linewidth)
+        plt.plot(t, p, linestyle, color=color, linewidth=linewidth)
         if target:
             if transform:
                 target = self.linTransform(target, transform['mean'], 
@@ -93,18 +93,27 @@ class MDNPlotter():
                                show_target_dist=False,
                                show_uniform_prior=False,
                                prior_range=None,
+                               posterior_range=None,
                                linewidth=2.0,
-                               linestyle='k-',
+                               linestyle='-',
+                               color = 'k',
                                res=300,
                                target_dist_line_style='g:',
-                               target_dist_linewidth=0.5):
+                               target_dist_linewidth=0.5,
+                               show_target = True):
         tgts = self.tgts
         if prior_range==None:
             prior_range=[np.min(tgts), np.max(tgts)]
-        t = np.linspace(prior_range[0], prior_range[1], res)
+        if posterior_range is None:
+            posterior_range = prior_range
+        t = np.linspace(posterior_range[0], posterior_range[1], res)
         smpl = self.ds.getSample(sample)
-        p = self.plot1DMixture(smpl[0], t, smpl[1], linewidth, 
+        target = None
+        if show_target:
+            target = smpl[1]
+        p = self.plot1DMixture(smpl[0], t, target, linewidth, 
                                linestyle=linestyle, 
+                               color = color,
                                transform=transform)
         if show_target_dist:
             if transform:
@@ -112,13 +121,16 @@ class MDNPlotter():
             [h, edges] = np.histogram(tgts, res, normed=True,
                                       range=(np.min(tgts), np.max(tgts)))
             plt.plot(edges[1:], h, target_dist_line_style)
+        if transform:
+            t = self.linTransform(t, transform['mean'], transform['scale'])
+            prior_range = self.linTransform(prior_range, transform['mean'],
+                                            transform['scale'])
         if show_uniform_prior:
-            if transform:
-                prior_range = self.linTransform(prior_range, transform['mean'],
-                                                transform['scale'])
-            yprior = 1./(prior_range[1]-prior_range[0])
-            plt.hlines(yprior, prior_range[0], prior_range[1], 'g', linewidth=linewidth)
-        
+            yprior = np.zeros(len(t))
+            yprior[np.logical_and(t >= prior_range[0], t <= prior_range[1])] = 1./(prior_range[1]-prior_range[0])
+            #plt.hlines(yprior, prior_range[0], prior_range[1], 'g', linewidth=linewidth)
+            plt.plot(t, yprior, 'g', linewidth=linewidth)
+        plt.gca().set_xlim(t[0], t[-1])
         return t, p
 
     def plotConditionalForSample(self, sample,
@@ -218,7 +230,8 @@ class MDNPlotter():
     
     def plotCenters(self, center = None, transform = None, interactive=False,
                     colors=None, size=20, plot_all_centers=False, square=False,
-                    rasterized=False, minimum_gain=None, show_colorbar=False):
+                    rasterized=False, minimum_gain=None, show_colorbar=False,
+                    edgecolor='none'):
         """
         Plot true vs. predicted posterior means.
         @param center:           plot the specified kernel
@@ -274,7 +287,7 @@ class MDNPlotter():
                             c=colors, 
                             s=size, 
                             cmap=cmap,
-                            edgecolor='none',
+                            edgecolor=edgecolor,
                             rasterized=rasterized
                             )
 
@@ -283,34 +296,36 @@ class MDNPlotter():
                                                                 [[1.,1.,1.],[0,0,0]])
             colors=alpha[np.arange(0,len(mu)), maxidxs]
             plt.scatter(mu, tgts, picker=interactive, c=colors, s=size, 
-                        cmap=cmap, edgecolor='none',
+                        cmap=cmap, edgecolor=edgecolor,
                         rasterized=rasterized
             )
         elif colors=='gain':
             cmap = mpl.colors.LinearSegmentedColormap.from_list('tmp', 
                                                                 [[.8,.8,.8],[0,0,0]])
+            #cmap = 'jet'
             if dKL is None:
                 dKL = self.getInformationGain()
             plt.scatter(mu, tgts, picker=interactive, c=dKL, s=size, 
-                        cmap=cmap, edgecolor='none',
+                        cmap=cmap, edgecolor=edgecolor,
                         rasterized=rasterized
             )
         elif colors is not None:
             plt.scatter(mu, tgts, picker=interactive, c=colors, s=size, 
-                        edgecolor='none',
+                        edgecolor=edgecolor,
                         rasterized=rasterized
             ) 
 
         else:
             plt.scatter(mu, tgts, picker=interactive, s=size,
-                        rasterized=rasterized
+                        rasterized=rasterized,
+                        edgecolor=edgecolor
             )
         if interactive:
             f=plt.gcf()
             f.canvas.mpl_connect('pick_event', MDNPlotter.scatterPick)
             
         if show_colorbar:
-            plt.colorbar()
+            plt.colorbar(use_gridspec=True)
         plt.xlabel('Prediction')
         plt.ylabel('Target')
         
