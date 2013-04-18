@@ -157,7 +157,6 @@ class MDNPlotter():
 
         inp = self.ds.getSample(sample)[0]
         tgt = self.ds.getSample(sample)[1]
-        
         p = np.zeros([len(c), len(t)])
 
         for ci in range(len(c)):
@@ -221,11 +220,12 @@ class MDNPlotter():
             t = t[:, None]
         if x.ndim == 1:
             return self.module.getPosterior(x, t)
-        elif x.ndim==2 and self.p == None:
+        elif x.ndim==2:
             self.p = []
             for xi in range(len(x)):
                 self.p.append(self.module.getPosterior(x[xi], t))
             self.p = np.array(self.p)
+        
         return self.p
     
     def plotCenters(self, center = None, transform = None, interactive=False,
