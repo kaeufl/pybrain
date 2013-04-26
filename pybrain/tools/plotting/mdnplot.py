@@ -37,7 +37,8 @@ class MDNPlotter():
 #        return p
     
     def plot1DMixture(self, x, t, target = None, linewidth = 2.0, 
-                      linestyle='-', color='k', transform=None):
+                      linestyle='-', color='k', transform=None,
+                      plot_individual_kernels=False):
         if t.ndim == 1:
             t = t[:, None]
         p = self.module.getPosterior(x, t)
@@ -46,6 +47,12 @@ class MDNPlotter():
             t = self.linTransform(t, transform['mean'], transform['scale'])
             p /= (np.max(t) - np.min(t))/Dt0
         plt.plot(t, p, linestyle, color=color, linewidth=linewidth)
+        if plot_individual_kernels:
+            y = self.module.activate(x)
+            alpha, sigma, mu = self.module.getMixtureParams(y)
+            for a,s,m in zip(alpha, sigma, mu):
+                pk =  a*self.module._phi(t, m[None,None], s[None,None])
+                plt.plot(t, pk[0,:,0], '--')
         if target:
             if transform:
                 target = self.linTransform(target, transform['mean'], 
@@ -100,7 +107,8 @@ class MDNPlotter():
                                res=300,
                                target_dist_line_style='g:',
                                target_dist_linewidth=0.5,
-                               show_target = True):
+                               show_target = True,
+                               plot_individual_kernels=False):
         tgts = self.tgts
         if prior_range==None:
             prior_range=[np.min(tgts), np.max(tgts)]
@@ -114,7 +122,8 @@ class MDNPlotter():
         p = self.plot1DMixture(smpl[0], t, target, linewidth, 
                                linestyle=linestyle, 
                                color = color,
-                               transform=transform)
+                               transform=transform,
+                               plot_individual_kernels=plot_individual_kernels)
         if show_target_dist:
             if transform:
                 tgts = self.linTransform(tgts, transform['mean'], transform['scale'])
@@ -231,10 +240,14 @@ class MDNPlotter():
     def plotCenters(self, center = None, transform = None, interactive=False,
                     colors=None, size=20, plot_all_centers=False, square=False,
                     rasterized=False, minimum_gain=None, show_colorbar=False,
-                    edgecolor='none'):
+                    edgecolor='none', mode_res=300):
         """
-        Plot true vs. predicted posterior means.
-        @param center:           plot the specified kernel
+        Plot target value vs. predicted posterior mode.
+        @param center:           use the position of the specified kernel, 
+                                 if 'max' use the dominant kernel, 
+                                 if 'all' plot all kernels
+                                 if 'None' (default) use the mode of the distribution
+        
         @param transform:        apply the specified linear transformation. Transform is
                                  a dict of the form {'mean' : float, 'scale' : float}
         @param interactive:      allow interactive selection of samples by clicking in the plot window
@@ -243,8 +256,8 @@ class MDNPlotter():
                                  - 'alpha': the alpha value of the specified kernel is shown on the color-axis
                                  - 'gain': the information gain (kl distance) of the according distribution                                     
         @param size:             size of the dots in scatter plot
-        @param plot_all_centers: plot all kernels and plot alpha on the color-axis
         @param minimum_gain:     Discard patterns with an information gain below threshold.
+        @param mode_res:         number of points to be used for mode finding
         """
         if self.y == None:
             self.update() 
@@ -255,6 +268,16 @@ class MDNPlotter():
                 mu[mu > np.max(tgts)] -= 2*np.pi
             while np.any(mu < np.min(tgts)):
                 mu[mu < np.min(tgts)] += 2*np.pi
+        
+        if type(center) == int:
+            mu = mu[:, center]
+        elif center=='max':
+            # select centers with highest mixing coefficient
+            maxidxs = self.getMaxKernel(alpha, sigma)
+            mu = mu[np.arange(0,len(mu)), maxidxs]
+        elif center==None:
+            mu = self.getMode(alpha, sigma, mu, res = mode_res)        
+        
         if transform:
             mu = self.linTransform(mu, transform['mean'], transform['scale'])
             tgts = self.linTransform(tgts, transform['mean'], transform['scale'])
@@ -269,16 +292,7 @@ class MDNPlotter():
             tgts = tgts[idxs]
             dKL = dKL[idxs]
         
-        if center != None:
-            mu = mu[:, center]
-        elif plot_all_centers==False:
-            # select centers with highest mixing coefficient
-            #maxidxs = np.argmax(alpha, axis=1)
-            maxidxs = self.getMaxKernel(alpha, sigma)
-            #print maxidxs
-            mu = mu[np.arange(0,len(mu)), maxidxs]
-
-        if plot_all_centers:
+        if center=='all':
             cmap = mpl.colors.LinearSegmentedColormap.from_list('tmp', 
                                                                 [[0.8,.8,.8],[0,0,0]])
             for ctr in range(mu.shape[1]):
@@ -343,10 +357,20 @@ class MDNPlotter():
         ind = event.ind
         print 'Pattern:', ind
 
-    def getMode(self):
-        """Return the mode of the distribution for every sample in the
-        dataset"""
-        pass
+    def getMode(self, alpha, sigma, mu, res=300):
+        """
+        Return the mode of the given 1-D mixture.
+
+        The mode is determined numerically using a grid with 'res' points.
+        """
+        assert mu.ndim == 3, "Wrong number of dimensions"
+        assert mu.shape[2] == 1, "Mode finding is only supported for 1-D mixtures."
+        t0 = np.min(self.ds.getField('target'))
+        t1 = np.max(self.ds.getField('target'))
+         
+        t = np.linspace(t0, t1, res)
+        m = [t[np.argmax(self.module._p(t[:,None], a, m, s))] for a,m,s in zip(alpha,mu,sigma)]
+        return np.array(m)
     
     def getMaxKernel(self, alpha, sigma):
         """

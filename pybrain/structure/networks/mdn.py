@@ -16,6 +16,8 @@ class MixtureDensityMixin(object):
         return np.maximum(tmp, np.finfo(float).eps)
     
     def getPosterior(self, x, t):
+        assert t.ndim ==2, "Wrong number of dimensions"
+        assert t.shape[1] == self.c, "Dimensionality of t doesn't match the MDN dimension."
         y = self.activate(x)
         alpha, sigma, mu = self.getMixtureParams(y)
         return self._p(t, alpha, mu, sigma)
