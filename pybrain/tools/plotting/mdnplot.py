@@ -14,7 +14,7 @@ class MDNPlotter():
         self.ds = ds
         self.y = None
 #        self.update()
-        self.p = None
+        self.p = {}
         self.tgts = ds.getTargets()
 
     def update(self):
@@ -38,15 +38,19 @@ class MDNPlotter():
     
     def plot1DMixture(self, x, t, target = None, linewidth = 2.0, 
                       linestyle='-', color='k', transform=None,
-                      plot_individual_kernels=False):
+                      plot_individual_kernels=False,
+                      label = None):
         if t.ndim == 1:
             t = t[:, None]
         p = self.module.getPosterior(x, t)
+        
+
         if transform:
             Dt0 = np.max(t) - np.min(t)
             t = self.linTransform(t, transform['mean'], transform['scale'])
             p /= (np.max(t) - np.min(t))/Dt0
-        plt.plot(t, p, linestyle, color=color, linewidth=linewidth)
+        plt.plot(t, p, linestyle, color=color, linewidth=linewidth, label=label)
+        plt.gca().set_ylim(0, 1.1*np.max(p))
         if plot_individual_kernels:
             y = self.module.activate(x)
             alpha, sigma, mu = self.module.getMixtureParams(y)
@@ -57,7 +61,7 @@ class MDNPlotter():
             if transform:
                 target = self.linTransform(target, transform['mean'], 
                                            transform['scale'])
-            plt.vlines(target, np.max(p), 0, linewidth=linewidth)
+            plt.axvline(target, linewidth=linewidth, zorder=10)
         return p
 
 #    def plot1DMixtureForSample(self, sample, transform=None,
@@ -108,7 +112,8 @@ class MDNPlotter():
                                target_dist_line_style='g:',
                                target_dist_linewidth=0.5,
                                show_target = True,
-                               plot_individual_kernels=False):
+                               plot_individual_kernels=False,
+                               label=None):
         tgts = self.tgts
         if prior_range==None:
             prior_range=[np.min(tgts), np.max(tgts)]
@@ -119,11 +124,14 @@ class MDNPlotter():
         target = None
         if show_target:
             target = smpl[1]
+        if transform is True:
+            transform = self.ds.tgt_transform
         p = self.plot1DMixture(smpl[0], t, target, linewidth, 
                                linestyle=linestyle, 
                                color = color,
                                transform=transform,
-                               plot_individual_kernels=plot_individual_kernels)
+                               plot_individual_kernels=plot_individual_kernels,
+                               label=label)
         if show_target_dist:
             if transform:
                 tgts = self.linTransform(tgts, transform['mean'], transform['scale'])
@@ -140,15 +148,18 @@ class MDNPlotter():
             #plt.hlines(yprior, prior_range[0], prior_range[1], 'g', linewidth=linewidth)
             plt.plot(t, yprior, 'g', linewidth=linewidth)
         plt.gca().set_xlim(t[0], t[-1])
+        
         return t, p
 
     def plotConditionalForSample(self, sample,
                                  conditional_input_idx=-1,
                                  target_range=None,
+                                 c_range=None,
                                  res = 300,
                                  c_transform=None,
                                  tgt_transform=None,
-                                 pC=None):
+                                 pC=None,
+                                 plot_target_value=True):
         """
         Plot a conditional probability distribution P(y|C). The index of the
         conditional variable can be set with conditional_input_idx and defaults 
@@ -161,7 +172,8 @@ class MDNPlotter():
         if target_range==None:
             target_range=[np.min(targets), np.max(targets)]
         t = np.linspace(target_range[0], target_range[1], res)
-        c_range = [np.min(inputs), np.max(inputs)]
+        if c_range==None:
+            c_range = [np.min(inputs), np.max(inputs)]
         c = np.linspace(c_range[0], c_range[1], res)
 
         inp = self.ds.getSample(sample)[0]
@@ -176,19 +188,22 @@ class MDNPlotter():
         
         if pC is not None:
             p *= pC[:, None]
-
         if c_transform is not None:
-            tmp = self.linTransform(inputs.copy(), c_transform['mean'], 
-                                       c_transform['scale'])
-            c_range = [np.min(tmp), np.max(tmp)]
+            #tmp = self.linTransform(inputs.copy(), c_transform['mean'], 
+            #                           c_transform['scale'])
+            #c_range = [np.min(tmp), np.max(tmp)]
+            c_range = self.linTransform(np.array(c_range), c_transform['mean'],
+                                        c_transform['scale'])
             inp = inp*c_transform['scale'] + c_transform['mean']
             
         if tgt_transform is not None:
-            tmp = self.linTransform(targets.copy(), tgt_transform['mean'], 
-                                        tgt_transform['scale'])
-            target_range=[np.min(tmp), np.max(tmp)]
+            #tmp = self.linTransform(targets.copy(), tgt_transform['mean'], 
+            #                            tgt_transform['scale'])
+            #target_range=[np.min(tmp), np.max(tmp)]
+            target_range = self.linTransform(np.array(target_range),
+                                             tgt_transform['mean'], 
+                                             tgt_transform['scale'])
             tgt = tgt*tgt_transform['scale'] + tgt_transform['mean']
-        
         plt.imshow(p.T, origin='lower', 
                    extent=[c_range[0], c_range[1], 
                            target_range[0],target_range[1]],
@@ -196,16 +211,17 @@ class MDNPlotter():
                    interpolation='none')
         plt.gca().set_xlim([c_range[0], c_range[1]])
         plt.gca().set_ylim([target_range[0], target_range[1]])
-        plt.plot(inp[conditional_input_idx], tgt, 'D', 
-                 markersize=10,
-                 markerfacecolor='red', 
-                 markeredgecolor='black', 
-                 markeredgewidth=1)
+        if plot_target_value:
+            plt.plot(inp[conditional_input_idx], tgt, 'D', 
+                     markersize=10,
+                     markerfacecolor='red', 
+                     markeredgecolor='black', 
+                     markeredgewidth=1)
         return p.T
     
-    def plotInformationGainDistribution(self):
-        dkl = self.getInformationGain()
-        plt.hist(dkl, 50)
+    def plotInformationGainDistribution(self, color='k', nbins=500):
+        dkl = self.getInformationGain(nbins=nbins)
+        plt.hist(dkl, 50, color=color)
         plt.xlabel('nats')
 
 #    def getPosterior(self, x, t):
@@ -225,22 +241,22 @@ class MDNPlotter():
 #        return self.p
 
     def getPosterior(self, x, t):
-        if t.ndim == 1:
-            t = t[:, None]
-        if x.ndim == 1:
-            return self.module.getPosterior(x, t)
-        elif x.ndim==2:
-            self.p = []
-            for xi in range(len(x)):
-                self.p.append(self.module.getPosterior(x[xi], t))
-            self.p = np.array(self.p)
-        
-        return self.p
+        idx = hash(str(x)+str(t))
+        if not self.p.has_key(idx): 
+            if t.ndim == 1:
+                t = t[:, None]
+            if x.ndim == 1:
+                return self.module.getPosterior(x, t)
+            elif x.ndim==2:
+                self.p[idx] = np.zeros((len(x), len(t)))
+                for xi in range(len(x)):
+                    self.p[idx][xi, :] = self.module.getPosterior(x[xi], t)
+        return self.p[idx]
     
     def plotCenters(self, center = None, transform = None, interactive=False,
                     colors=None, size=20, plot_all_centers=False, square=False,
                     rasterized=False, minimum_gain=None, show_colorbar=False,
-                    edgecolor='none', mode_res=300):
+                    edgecolor='none', mode_res=300, gain_nbins=500):
         """
         Plot target value vs. predicted posterior mode.
         @param center:           use the position of the specified kernel, 
@@ -284,7 +300,7 @@ class MDNPlotter():
         
         dKL = None
         if minimum_gain:
-            dKL = self.getInformationGain()
+            dKL = self.getInformationGain(nbins=gain_nbins)
             idxs = dKL > minimum_gain
             alpha = alpha[idxs]
             sigma = sigma[idxs]
@@ -318,7 +334,7 @@ class MDNPlotter():
                                                                 [[.8,.8,.8],[0,0,0]])
             #cmap = 'jet'
             if dKL is None:
-                dKL = self.getInformationGain()
+                dKL = self.getInformationGain(nbins=gain_nbins)
             plt.scatter(mu, tgts, picker=interactive, c=dKL, s=size, 
                         cmap=cmap, edgecolor=edgecolor,
                         rasterized=rasterized
@@ -363,6 +379,8 @@ class MDNPlotter():
 
         The mode is determined numerically using a grid with 'res' points.
         """
+        # TODO: use getPosterior instead of calling module._p, this avoids many
+        # re-evaluations of the posterior
         assert mu.ndim == 3, "Wrong number of dimensions"
         assert mu.shape[2] == 1, "Mode finding is only supported for 1-D mixtures."
         t0 = np.min(self.ds.getField('target'))
@@ -445,5 +463,3 @@ class MDNPlotter():
                                posterior * np.log(posterior/(prior+eps)) * dt, 
                                0), 
                       axis=1)
-
-    
