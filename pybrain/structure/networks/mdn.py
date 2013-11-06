@@ -30,8 +30,10 @@ class MixtureDensityMixin(object):
         return -np.log(tmp)
     
     def getDatasetError(self, dataset):
+        #import pdb; pdb.set_trace()
         Y = self.activateOnDataset(dataset)
         err = 0
+        
         for k,y in enumerate(Y):
             err += self.getError(y, dataset.getSample(k)[1])
         return err / dataset.getLength()

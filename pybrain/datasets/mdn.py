@@ -2,7 +2,6 @@ __author__ = 'Paul Kaeufl, kaeufl@geo.uu.nl'
 
 import numpy as np
 from supervised import SupervisedDataSet
-from pybrain.auxiliary import mdn
 from arac.cppbridge import SupervisedSimpleDataset
 
 class MDNDataSet(SupervisedDataSet):
