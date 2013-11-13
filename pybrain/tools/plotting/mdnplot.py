@@ -243,14 +243,7 @@ class MDNPlotter():
     def getPosterior(self, x, t):
         idx = hash(str(x)+str(t))
         if not self.p.has_key(idx): 
-            if t.ndim == 1:
-                t = t[:, None]
-            if x.ndim == 1:
-                return self.module.getPosterior(x, t)
-            elif x.ndim==2:
-                self.p[idx] = np.zeros((len(x), len(t)))
-                for xi in range(len(x)):
-                    self.p[idx][xi, :] = self.module.getPosterior(x[xi], t)
+            self.p[idx] = self.module.getPosterior(x, t)
         return self.p[idx]
     
     def plotCenters(self, center = None, transform = None, interactive=False,
@@ -276,15 +269,15 @@ class MDNPlotter():
         @param mode_res:         number of points to be used for mode finding
         """
         if self.y == None:
-            self.update() 
-        alpha, sigma, mu = mdn.getMixtureParams(self.y, self.module.M, self.module.c)
+            self.update()
         tgts = self.tgts
-        if isinstance(self.module, PeriodicMixtureDensityNetwork):
-            while np.any(mu > np.max(tgts)):
-                mu[mu > np.max(tgts)] -= 2*np.pi
-            while np.any(mu < np.min(tgts)):
-                mu[mu < np.min(tgts)] += 2*np.pi
-        
+        if center=='max' or center=='all' or minimum_gain or colors=='alpha' or type(center)==int:
+            alpha, sigma, mu = mdn.getMixtureParams(self.y, self.module.M, self.module.c)
+            if isinstance(self.module, PeriodicMixtureDensityNetwork):
+                while np.any(mu > np.max(tgts)):
+                    mu[mu > np.max(tgts)] -= 2*np.pi
+                while np.any(mu < np.min(tgts)):
+                    mu[mu < np.min(tgts)] += 2*np.pi
         if type(center) == int:
             mu = mu[:, center]
         elif center=='max':
@@ -292,7 +285,7 @@ class MDNPlotter():
             maxidxs = self.getMaxKernel(alpha, sigma)
             mu = mu[np.arange(0,len(mu)), maxidxs]
         elif center==None:
-            mu = self.getMode(alpha, sigma, mu, res = mode_res)        
+            mu = self.getMode(res = mode_res)        
         
         if transform:
             mu = self.linTransform(mu, transform['mean'], transform['scale'])
@@ -373,22 +366,43 @@ class MDNPlotter():
         ind = event.ind
         print 'Pattern:', ind
 
-    def getMode(self, alpha, sigma, mu, res=300):
+    #def getMode(self, alpha, sigma, mu, res=100):
+    #    """
+    #    Return the mode of the given 1-D mixture.
+#
+#        The mode is determined numerically using a grid with 'res' points.
+#        """
+#        # TODO: use getPosterior instead of calling module._p, this avoids many
+#        # re-evaluations of the posterior
+#        assert mu.ndim == 3, "Wrong number of dimensions"
+#        assert mu.shape[2] == 1, "Mode finding is only supported for 1-D mixtures."
+#        t0 = np.min(self.ds.getField('target'))
+#        t1 = np.max(self.ds.getField('target'))
+#         
+#        t = np.linspace(t0, t1, res)
+#        p = self.module._p(t[None, :, None], alpha, mu, sigma)
+#        m = t[np.argmax(p, axis=1)]
+#        #m = [t[np.argmax(self.module._p(t[:,None], a, m, s))] for a,m,s in zip(alpha,mu,sigma)]
+#        return m
+    
+    def getMode(self, sample=None, res=100):
         """
-        Return the mode of the given 1-D mixture.
+        Return the mode of 1-D mixture for all samples in the dataset or 
+        for the given sample.
 
         The mode is determined numerically using a grid with 'res' points.
         """
-        # TODO: use getPosterior instead of calling module._p, this avoids many
-        # re-evaluations of the posterior
-        assert mu.ndim == 3, "Wrong number of dimensions"
-        assert mu.shape[2] == 1, "Mode finding is only supported for 1-D mixtures."
         t0 = np.min(self.ds.getField('target'))
         t1 = np.max(self.ds.getField('target'))
          
         t = np.linspace(t0, t1, res)
-        m = [t[np.argmax(self.module._p(t[:,None], a, m, s))] for a,m,s in zip(alpha,mu,sigma)]
-        return np.array(m)
+        if sample is None:
+            p = self.getPosterior(self.ds.getField('input'), t)
+        else:
+            p = self.getPosterior(self.ds.getSample(sample)[0], t)
+        m = t[np.argmax(p, axis=1)]
+        return m 
+    
     
     def getMaxKernel(self, alpha, sigma):
         """

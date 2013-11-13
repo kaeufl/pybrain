@@ -8,17 +8,39 @@ from pybrain.structure import LinearLayer, TanhLayer, \
 class MixtureDensityMixin(object):
     def _phi(self, T, mu, sigma):
         if T.ndim == 1:
-            T = T[None,:]
-        dist = np.sum((T[:,None,:]-mu[None,:,:])**2, axis=2)
-        tmp = np.exp(- 1.0 * dist / (2 * sigma))
+            assert len(T) == mu.shape[-1]
+            T = T[None, None,:]
+        if T.ndim == 2:
+            assert T.shape[1] == mu.shape[-1]
+            T = T[None, :, :]
+        if mu.ndim == 2:
+            mu = mu[None, :, :]
+        if sigma.ndim == 1:
+            sigma = sigma[None, :]
+        dist = np.sum((T[:,:,None,:]-mu[:,None,:,:])**2, axis=-1)
+        tmp = np.exp(- 1.0 * dist / (2 * sigma[:,None,:]))
         tmp[tmp < np.finfo('float64').eps] = np.finfo('float64').eps
-        tmp *= (1.0 / (2*np.pi*sigma)**(0.5*self.c))
+        tmp *= (1.0 / (2*np.pi*sigma[:,None,:])**(0.5*self.c))
         return np.maximum(tmp, np.finfo(float).eps)
     
     def getPosterior(self, x, t):
-        assert t.ndim ==2, "Wrong number of dimensions"
-        assert t.shape[1] == self.c, "Dimensionality of t doesn't match the MDN dimension."
-        y = self.activate(x)
+        x = np.array(x)
+        t = np.array(t)
+        if t.ndim == 1:
+            if len(t) == self.c:
+                t = t[None, None, :]
+            elif len(t) == len(x):
+                t = t[:, None, None]
+            else:
+                t = t[None, :, None]
+        if t.ndim == 2:
+            t = t[None, :, :]
+        if x.ndim == 2:
+            y = np.zeros((len(x), self.outdim))
+            for i,xi in enumerate(x):
+                y[i] = self.activate(xi)
+        else:
+            y = self.activate(x)
         alpha, sigma, mu = self.getMixtureParams(y)
         return self._p(t, alpha, mu, sigma)
 
@@ -30,12 +52,11 @@ class MixtureDensityMixin(object):
         return -np.log(tmp)
     
     def getDatasetError(self, dataset):
-        #import pdb; pdb.set_trace()
         Y = self.activateOnDataset(dataset)
-        err = 0
-        
-        for k,y in enumerate(Y):
-            err += self.getError(y, dataset.getSample(k)[1])
+        #err = 0
+        err = np.sum(self.getError(Y, dataset.getField('target')[:,None,:]))
+        #for k,y in enumerate(Y):
+        #    err += self.getError(y, dataset.getSample(k)[1])
         return err / dataset.getLength()
 
 class MixtureDensityNetwork(FeedForwardNetwork, MixtureDensityMixin):
@@ -46,10 +67,7 @@ class MixtureDensityNetwork(FeedForwardNetwork, MixtureDensityMixin):
         """
         Initialize an MDN with M kernels and output dimension c.
         
-        If periodic is True, wrapped Gaussian kernels are used (e.g. as described 
-        in Bishop, Christopher M., and C. Legleye. "Estimating conditional 
-        probability densities for periodic variables." (1994): 641-648. )
-        """
+                """
         FeedForwardNetwork.__init__(self, *args, **kwargs)
         self.M = M
         self.c = c
@@ -59,23 +77,34 @@ class MixtureDensityNetwork(FeedForwardNetwork, MixtureDensityMixin):
         self.argdict['M'] = M
         
     def _p(self, t, alpha, mu, sigma):
+        assert t.ndim == 3, "shape of t must be (N, nt, dy)"
+        assert alpha.ndim == 2, "shape of alpha must be (N, M)" 
+        assert mu.ndim == 3, "shape of mu must be (N, M, dy)"
+        assert sigma.ndim == 2, "shape of sigma must be (N, M)"
         phi = self._phi(t, mu, sigma)
-        return np.sum(alpha * phi, axis = 1)
+        return np.sum(alpha[:,None,:] * phi, axis = -1)
     
     def softmax(self, x):
-        return np.exp(x) / np.sum(np.exp(x), axis = 0)
+        return np.exp(x) / np.sum(np.exp(x), axis = 1)[:, None]
 
     def getMixtureParams(self, y):
-        alpha = np.maximum(self.softmax(y[0:self.M]), np.finfo(float).eps)
-        sigma = np.minimum(y[self.M:2*self.M], np.log(np.finfo(float).max))
+        if y.ndim == 1:
+            y = y[None, :]
+        alpha = np.maximum(self.softmax(y[:, 0:self.M]), np.finfo(float).eps)
+        sigma = np.minimum(y[:, self.M:2*self.M], np.log(np.finfo(float).max))
         sigma = np.exp(sigma) # sigma
         sigma = np.maximum(sigma, np.finfo(float).eps)
-        mu = np.reshape(y[2*self.M:], (self.M, self.c))
+        mu = np.reshape(y[:, 2*self.M:], (y.shape[0], self.M, self.c))
         return alpha, sigma, mu
 
     def getOutputError(self, y, t):
+        assert y.ndim == 1
+        assert t.ndim == 1
         alpha, sigma, mu = self.getMixtureParams(y)
-        phi = self._phi(t, mu, sigma)
+        phi = self._phi(t, mu, sigma)[0,0]
+        alpha = alpha[0]
+        sigma = sigma[0]
+        mu = mu[0]
         aphi = alpha*phi
         pi = aphi / np.sum(aphi, 0)
 
@@ -126,6 +155,7 @@ class MixtureDensityNetwork(FeedForwardNetwork, MixtureDensityMixin):
         return cnet
 
     def convertToPythonNetwork(self):
+        self.reset() # avoid a memory leak?
         cnet = self.copy()
         net = MixtureDensityNetwork(self.M, self.c)
         self._transferNetStructure(cnet, net)
@@ -133,16 +163,25 @@ class MixtureDensityNetwork(FeedForwardNetwork, MixtureDensityMixin):
         return net
 
 class PeriodicMixtureDensityNetwork(MixtureDensityNetwork):
+    """
+    Uses wrapped Gaussian kernels as described 
+    in Bishop, Christopher M., and C. Legleye. "Estimating conditional 
+    probability densities for periodic variables." (1994): 641-648.
+    """
     nperiods = 7
     
     hist_errors = list()
     hist_deriv = list()
     
     def _p(self, t, alpha, mu, sigma):
-        phi = np.zeros([len(t), self.M])
+        assert t.ndim == 3, "shape of t must be (N, nt, dy)"
+        assert alpha.ndim == 2, "shape of alpha must be (N, M)" 
+        assert mu.ndim == 3, "shape of mu must be (N, M, dy)"
+        assert sigma.ndim == 2, "shape of sigma must be (N, M)"        
+        phi = np.zeros([alpha.shape[0], t.shape[1], self.M])
         for l in range(-self.nperiods, self.nperiods+1):
             phi += self._phi(t+l*2*np.pi, mu, sigma)
-        return np.sum(alpha * phi, axis = 1)
+        return np.sum(alpha[:,None,:] * phi, axis = -1)
     
 #    def getError(self, y, t):
 #        alpha, sigma, mu = self.getMixtureParams(y)
@@ -161,8 +200,12 @@ class PeriodicMixtureDensityNetwork(MixtureDensityNetwork):
         
         Phi = np.zeros([self.M, len(L)])
         for lk in range(len(L)):
-            Phi[:, lk] = self._phi(chi[:,lk], mu, sigma)
+            Phi[:, lk] = self._phi(chi[:,lk], mu, sigma)[0,0]
         
+        alpha = alpha[0]
+        sigma = sigma[0]
+        mu = mu[0]
+
         aphi = alpha * np.sum(Phi, axis=1)
         pi = aphi / np.sum(aphi, 0)
         _pi = alpha / np.sum(aphi, 0)
@@ -198,6 +241,7 @@ class PeriodicMixtureDensityNetwork(MixtureDensityNetwork):
         return cnet
 
     def convertToPythonNetwork(self):
+        self.reset() # aoid a memory leak?
         cnet = self.copy()
         net = PeriodicMixtureDensityNetwork(self.M, self.c)
         self._transferNetStructure(cnet, net)

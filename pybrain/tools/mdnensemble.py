@@ -66,28 +66,43 @@ class MDNEnsemble(MixtureDensityMixin):
         return y
 
     def getMixtureParams(self, y):
-        alpha = np.zeros(self.M)
-        sigma = np.zeros(self.M)
-        mu = np.zeros((self.M, self.c))
+        if y.ndim == 1:
+            y = y[None, :]
+        alpha = np.zeros((len(y), self.M))
+        sigma = np.zeros((len(y), self.M))
+        mu = np.zeros((len(y), self.M, self.c))
         M = 0
         for m,module in enumerate(self.modules):
-            _y = np.zeros(module.outdim)
-            _y[:module.M] = y[M:M+module.M]
-            _y[module.M:2*module.M] = y[self.M+M:self.M+M+module.M]
-            _y[2*module.M:] = y[2*self.M+self.c*M:2*self.M+self.c*(M+module.M)]
+            _y = np.zeros((len(y), module.outdim))
+            _y[:, :module.M] = y[:, M:M+module.M]
+            _y[:, module.M:2*module.M] = y[:, self.M+M:self.M+M+module.M]
+            _y[:, 2*module.M:] = y[:, 2*self.M+self.c*M:2*self.M+self.c*(M+module.M)]
             _alpha, _sigma, _mu = module.getMixtureParams(_y)
-            alpha[M:M+module.M] = _alpha*self.w[m]/self.wtot
-            sigma[M:M+module.M] = _sigma
-            mu[M:M+module.M] = _mu
+            alpha[:, M:M+module.M] = _alpha*self.w[m]/self.wtot
+            sigma[:, M:M+module.M] = _sigma
+            mu[:, M:M+module.M] = _mu
             M += module.M
         return alpha, sigma, mu
     
     def _p(self, t, alpha, mu, sigma):
-        p = np.zeros(len(t))
+        if t.ndim == 1:
+            t = t[None, :]
+        p = np.zeros((alpha.shape[0], t.shape[1]))
         M = 0
         for _,module in enumerate(self.modules):
-            p += module._p(t, alpha[M:M+module.M], mu[M:M+module.M], 
-                           sigma[M:M+module.M])
+            p += module._p(t, alpha[:, M:M+module.M], mu[:, M:M+module.M], 
+                    sigma[:, M:M+module.M])
             M += module.M
         return p
+
+    def convertToPythonNetwork(self):
+        for k, module in enumerate(self.modules):
+            self.modules[k] = module.convertToPythonNetwork()
+        return self
+
+    def convertToFastNetwork(self):
+        for k, module in enumerate(self.modules):
+            self.modules[k] = module.convertToFastNetwork()
+        return self
+
     
