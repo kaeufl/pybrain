@@ -42,8 +42,7 @@ class MDNPlotter():
                       label = None):
         if t.ndim == 1:
             t = t[:, None]
-        p = self.module.getPosterior(x, t)
-        
+        p = self.module.getPosterior(x, t)[0]
 
         if transform:
             Dt0 = np.max(t) - np.min(t)
@@ -113,9 +112,11 @@ class MDNPlotter():
                                target_dist_linewidth=0.5,
                                show_target = True,
                                plot_individual_kernels=False,
-                               label=None):
+                               label=None,
+                               with_confidence_intervals=False):
         tgts = self.tgts
         if prior_range==None:
+            assert len(tgts) > 100, "Dataset too small to estimate target range"
             prior_range=[np.min(tgts), np.max(tgts)]
         if posterior_range is None:
             posterior_range = prior_range
@@ -125,7 +126,7 @@ class MDNPlotter():
         if show_target:
             target = smpl[1]
         if transform is True:
-            transform = self.ds.tgt_transform
+            transform = self.ds.tgt_transform['rescale_params']
         p = self.plot1DMixture(smpl[0], t, target, linewidth, 
                                linestyle=linestyle, 
                                color = color,
@@ -138,6 +139,13 @@ class MDNPlotter():
             [h, edges] = np.histogram(tgts, res, normed=True,
                                       range=(np.min(tgts), np.max(tgts)))
             plt.plot(edges[1:], h, target_dist_line_style)
+        if with_confidence_intervals:
+            m0,m1,m2 = self.getMode(sample, res, bool(transform), 
+                                    sigma_level=1, 
+                                    prior_range=prior_range) 
+            plt.axvline(m0, color='g', linestyle='--')
+            plt.axvline(m1, color='g', linestyle='--')
+            plt.axvline(m2, color='g', linestyle='--')
         if transform:
             t = self.linTransform(t, transform['mean'], transform['scale'])
             prior_range = self.linTransform(prior_range, transform['mean'],
@@ -147,6 +155,7 @@ class MDNPlotter():
             yprior[np.logical_and(t >= prior_range[0], t <= prior_range[1])] = 1./(prior_range[1]-prior_range[0])
             #plt.hlines(yprior, prior_range[0], prior_range[1], 'g', linewidth=linewidth)
             plt.plot(t, yprior, 'g', linewidth=linewidth)
+            
         plt.gca().set_xlim(t[0], t[-1])
         
         return t, p
@@ -385,15 +394,23 @@ class MDNPlotter():
 #        #m = [t[np.argmax(self.module._p(t[:,None], a, m, s))] for a,m,s in zip(alpha,mu,sigma)]
 #        return m
     
-    def getMode(self, sample=None, res=100):
+    def getMode(self, sample=None, res=100, transform=False, sigma_level=0,
+                prior_range=None):
         """
         Return the mode of 1-D mixture for all samples in the dataset or 
         for the given sample.
+        If sigma_level is given, a confidence interval is returned along
+        with the mode.
 
         The mode is determined numerically using a grid with 'res' points.
         """
-        t0 = np.min(self.ds.getField('target'))
-        t1 = np.max(self.ds.getField('target'))
+        if prior_range is not None:
+            t0 = prior_range[0]
+            t1 = prior_range[1]
+        else:
+            assert len(self.ds) > 100, "Dataset too small to estimate target range"
+            t0 = np.min(self.ds.getField('target'))
+            t1 = np.max(self.ds.getField('target'))
          
         t = np.linspace(t0, t1, res)
         if sample is None:
@@ -401,8 +418,26 @@ class MDNPlotter():
         else:
             p = self.getPosterior(self.ds.getSample(sample)[0], t)
         m = t[np.argmax(p, axis=1)]
-        return m 
-    
+        if sigma_level > 0:
+            assert len(p) == 1
+            pmax = np.max(p)
+            thres = np.exp(-0.5*sigma_level**2)
+            tmp = np.where(p[0] <= thres*pmax)[0]
+            tmp1 = np.where(tmp - np.argmax(p, axis=1) < 0)[0]
+            tmp2 = np.where(tmp - np.argmax(p, axis=1) > 0)[0]
+            if len(tmp1):
+                m0 = t[tmp[np.max(tmp1)]]
+            else:
+                m0 = m
+            if len(tmp2):
+                m1 = t[tmp[np.min(tmp2)]]
+            else:
+                m1 = m
+            m = [m0,m,m1]
+        if transform:
+            m=self.ds.tgt_transform['scale']*m + self.ds.tgt_transform['mean']
+        return m
+        
     
     def getMaxKernel(self, alpha, sigma):
         """
