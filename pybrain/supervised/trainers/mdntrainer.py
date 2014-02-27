@@ -57,7 +57,6 @@ class MDNTrainer(SCGTrainer):
             size_i = conn_i_h.paramdim
             conn_i_h.params[:] = np.random.normal(loc=0.0, scale = sigma1, 
                                                   size=size_i)
-        
         conn_h_o = self.module.connections[layers[-2]][0]        
         size_h = conn_h_o.paramdim
         conn_h_o.params[:] = np.random.normal(loc=0.0, scale = sigma2,
@@ -151,7 +150,7 @@ class MDNTrainer(SCGTrainer):
         #print trainer.module.derivs
         return 1 * trainer.module.derivs
     
-    def getFastTrainer(self, validation_set=None):
+    def getFastTrainer(self, validation_set=None, use_cg=False):
         assert isinstance(self.module, _Network), "A fast network is required. Call MDN.convertToFast() first."
         if isinstance(self.module, _PeriodicMixtureDensityNetwork):
             CMDNTrainer = FastPeriodicMDNTrainer
@@ -160,11 +159,13 @@ class MDNTrainer(SCGTrainer):
         if not self._cmdntrainer:
             if validation_set==None:
                 self._cmdntrainer = CMDNTrainer(self.module.proxies.map[self.module], 
-                                                self.ds.getFastDataset())
+                                                self.ds.getFastDataset(),
+                                                use_cg)
             else:
                 self._cmdntrainer = CMDNTrainer(self.module.proxies.map[self.module], 
                                                 self.ds.getFastDataset(),
-                                                validation_set.getFastDataset())
+                                                validation_set.getFastDataset(),
+                                                use_cg)
         return self._cmdntrainer
 
 #    @staticmethod
