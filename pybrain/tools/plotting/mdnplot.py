@@ -24,6 +24,16 @@ class MDNPlotter():
     def linTransform(self, x, mu, scale):
         return x*scale+mu
 
+    def invTransform(self, x, transform):
+        if transform.has_key('rescale_params'):
+            mean = transform['rescale_params']['mean']
+            scale = transform['rescale_params']['scale']
+            x = self.linTransform(x, mean, scale)
+        if transform.has_key('log') and transform['log'] == True:
+            x = np.exp(x)
+        return x
+
+
 #    def plot1DMixture(self, t, alpha, mu, sigma, target = None, linewidth = 2.0):
 #        if t.ndim == 1:
 #            t = t[:, None]
@@ -46,7 +56,7 @@ class MDNPlotter():
 
         if transform:
             Dt0 = np.max(t) - np.min(t)
-            t = self.linTransform(t, transform['mean'], transform['scale'])
+            t = self.invTransform(t, transform)
             p /= (np.max(t) - np.min(t))/Dt0
         plt.plot(t, p, linestyle, color=color, linewidth=linewidth, label=label)
         plt.gca().set_ylim(0, 1.1*np.max(p))
@@ -58,8 +68,7 @@ class MDNPlotter():
                 plt.plot(t, pk[0,:,0], '--')
         if target:
             if transform:
-                target = self.linTransform(target, transform['mean'], 
-                                           transform['scale'])
+                target = self.invTransform(target, transform)
             plt.axvline(target, linewidth=linewidth, zorder=10)
         return p
 
@@ -126,7 +135,7 @@ class MDNPlotter():
         if show_target:
             target = smpl[1]
         if transform is True:
-            transform = self.ds.tgt_transform['rescale_params']
+            transform = self.ds.tgt_transform
         p = self.plot1DMixture(smpl[0], t, target, linewidth, 
                                linestyle=linestyle, 
                                color = color,
@@ -135,7 +144,7 @@ class MDNPlotter():
                                label=label)
         if show_target_dist:
             if transform:
-                tgts = self.linTransform(tgts, transform['mean'], transform['scale'])
+                tgts = self.invTransform(tgts, transform)
             [h, edges] = np.histogram(tgts, res, normed=True,
                                       range=(np.min(tgts), np.max(tgts)))
             plt.plot(edges[1:], h, target_dist_line_style)
@@ -147,9 +156,8 @@ class MDNPlotter():
             plt.axvline(m1, color='g', linestyle='--')
             plt.axvline(m2, color='g', linestyle='--')
         if transform:
-            t = self.linTransform(t, transform['mean'], transform['scale'])
-            prior_range = self.linTransform(prior_range, transform['mean'],
-                                            transform['scale'])
+            t = self.invTransform(t, transform)
+            prior_range = self.invTransform(prior_range, transform)
         if show_uniform_prior:
             yprior = np.zeros(len(t))
             yprior[np.logical_and(t >= prior_range[0], t <= prior_range[1])] = 1./(prior_range[1]-prior_range[0])
@@ -297,8 +305,8 @@ class MDNPlotter():
             mu = self.getMode(res = mode_res)        
         
         if transform:
-            mu = self.linTransform(mu, transform['mean'], transform['scale'])
-            tgts = self.linTransform(tgts, transform['mean'], transform['scale'])
+            mu = self.invTransform(mu, transform)
+            tgts = self.invTransform(tgts, transform)
         
         dKL = None
         if minimum_gain:
@@ -393,6 +401,32 @@ class MDNPlotter():
 #        m = t[np.argmax(p, axis=1)]
 #        #m = [t[np.argmax(self.module._p(t[:,None], a, m, s))] for a,m,s in zip(alpha,mu,sigma)]
 #        return m
+
+    def _getMode(self, t, p, res=100, transform=False, sigma_level=0):
+        m = t[np.argmax(p, axis=1)]
+        if sigma_level > 0:
+            assert len(p) == 1
+            pmax = np.max(p)
+            thres = np.exp(-0.5*sigma_level**2)
+            tmp = np.where(p[0] <= thres*pmax)[0]
+            tmp1 = np.where(tmp - np.argmax(p, axis=1) < 0)[0]
+            tmp2 = np.where(tmp - np.argmax(p, axis=1) > 0)[0]
+            if len(tmp1):
+                m0 = t[tmp[np.max(tmp1)]]
+            else:
+                m0 = m
+            if len(tmp2):
+                m1 = t[tmp[np.min(tmp2)]]
+            else:
+                m1 = m
+            m = [m0,m,m1]
+        if transform:
+            if transform == True:
+                transform = self.ds.tgt_transform
+            m = self.invTransform(m, transform)
+            #m=self.ds.tgt_transform['scale']*m + self.ds.tgt_transform['mean']
+        return m
+
     
     def getMode(self, sample=None, res=100, transform=False, sigma_level=0,
                 prior_range=None):
@@ -417,25 +451,7 @@ class MDNPlotter():
             p = self.getPosterior(self.ds.getField('input'), t)
         else:
             p = self.getPosterior(self.ds.getSample(sample)[0], t)
-        m = t[np.argmax(p, axis=1)]
-        if sigma_level > 0:
-            assert len(p) == 1
-            pmax = np.max(p)
-            thres = np.exp(-0.5*sigma_level**2)
-            tmp = np.where(p[0] <= thres*pmax)[0]
-            tmp1 = np.where(tmp - np.argmax(p, axis=1) < 0)[0]
-            tmp2 = np.where(tmp - np.argmax(p, axis=1) > 0)[0]
-            if len(tmp1):
-                m0 = t[tmp[np.max(tmp1)]]
-            else:
-                m0 = m
-            if len(tmp2):
-                m1 = t[tmp[np.min(tmp2)]]
-            else:
-                m1 = m
-            m = [m0,m,m1]
-        if transform:
-            m=self.ds.tgt_transform['scale']*m + self.ds.tgt_transform['mean']
+        m = self._getMode(t, p, res, transform, sigma_level)
         return m
         
     

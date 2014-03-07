@@ -14,7 +14,7 @@ class SCGTrainer(Trainer):
 
     def __init__(self, module, dataset, totalIterations = 100,
                  xPrecision = finfo(float).eps, fPrecision = finfo(float).eps,
-                 **kwargs):
+                 init_scg=True, **kwargs):
         """Create a SCGTrainer to train the specified `module` on the
         specified `dataset`.
         """
@@ -25,10 +25,12 @@ class SCGTrainer(Trainer):
         self.totalepochs = 0
         self.module = module
         #self.tmp_module = module.copy()
-
-        self.scg = SCG(self.module.params, self.f, self.df, self,
-                       totalIterations, xPrecision, fPrecision,
-                       evalFunc = lambda x: str(x / self.ds.getLength()))
+        if init_scg:
+            self.scg = SCG(self.module.params, self.f, self.df, self,
+                           totalIterations, xPrecision, fPrecision,
+                           evalFunc = lambda x: str(x / self.ds.getLength()))
+        else:
+            print "Warning: SCG trainer not initialized!"
 
     @staticmethod
     def f(params, trainer):
