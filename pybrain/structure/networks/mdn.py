@@ -241,14 +241,19 @@ class PeriodicMixtureDensityNetwork(MixtureDensityNetwork):
         return cnet
 
     def convertToPythonNetwork(self):
-        self.reset() # aoid a memory leak?
+        self.reset() # avoid a memory leak?
         cnet = self.copy()
         net = PeriodicMixtureDensityNetwork(self.M, self.c)
         self._transferNetStructure(cnet, net)
         net.owner = net
         return net
 
-def buildMixtureDensityNetwork(di, H, dy, M, fast = False, periodic = False):
+def buildMixtureDensityNetwork(di, H, dy, M, fast = False, periodic = False,
+                               in_ranges=None, out_ranges=None):
+    """
+    Construct a Mixture density network. If in_ranges and out_ranges are given a 
+    partially connected first layer is created with the given input and output ranges. 
+    """
     if type(H) == int:
         H = [H]
     if periodic:
@@ -261,7 +266,17 @@ def buildMixtureDensityNetwork(di, H, dy, M, fast = False, periodic = False):
     for i, h in enumerate(H):
         net.addModule(TanhLayer(h, name = 'h%i'%i))
     net.addOutputModule(LinearLayer(dy, name = 'o'))
-    net.addConnection(FullConnection(net['i'], net['h0']))
+    if in_ranges and out_ranges:
+        # partially connected first layer
+        for r_in, r_out in zip(in_ranges, out_ranges):
+            net.addConnection(FullConnection(net['i'], net['h0'], 
+                                             inSliceFrom=r_in[0],
+                                             inSliceTo=r_in[1],
+                                             outSliceFrom=r_out[0],
+                                             outSliceTo=r_out[1]))
+    else:
+        # fully connected first layer
+        net.addConnection(FullConnection(net['i'], net['h0']))
     net.addConnection(FullConnection(net['bias'], net['h0']))
     for i, h in enumerate(H[1:]):
         net.addConnection(FullConnection(net['bias'], net['h%i' % (i+1)]))

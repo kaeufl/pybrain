@@ -19,6 +19,7 @@ class MDNPlotter():
 
     def update(self):
         self.y = self.module.activateOnDataset(self.ds)
+        self.p = {}
         #self.p = None
 
     def linTransform(self, x, mu, scale):
@@ -32,7 +33,6 @@ class MDNPlotter():
         if transform.has_key('log') and transform['log'] == True:
             x = np.exp(x)
         return x
-
 
 #    def plot1DMixture(self, t, alpha, mu, sigma, target = None, linewidth = 2.0):
 #        if t.ndim == 1:
@@ -217,10 +217,12 @@ class MDNPlotter():
             #tmp = self.linTransform(targets.copy(), tgt_transform['mean'], 
             #                            tgt_transform['scale'])
             #target_range=[np.min(tmp), np.max(tmp)]
-            target_range = self.linTransform(np.array(target_range),
-                                             tgt_transform['mean'], 
-                                             tgt_transform['scale'])
-            tgt = tgt*tgt_transform['scale'] + tgt_transform['mean']
+#             target_range = self.linTransform(np.array(target_range),
+#                                              tgt_transform['mean'], 
+#                                              tgt_transform['scale'])
+#             tgt = tgt*tgt_transform['scale'] + tgt_transform['mean']
+            target_range = self.invTransform(np.array(target_range), tgt_transform)
+            tgt = self.invTransform(tgt, tgt_transform)
         plt.imshow(p.T, origin='lower', 
                    extent=[c_range[0], c_range[1], 
                            target_range[0],target_range[1]],

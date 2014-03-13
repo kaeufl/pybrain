@@ -150,7 +150,8 @@ class MDNTrainer(SCGTrainer):
         #print trainer.module.derivs
         return 1 * trainer.module.derivs
     
-    def getFastTrainer(self, validation_set=None, use_cg=False):
+    def getFastTrainer(self, validation_set=None, use_cg=False, 
+                       batch_size=0, batch_epochs=100):
         assert isinstance(self.module, _Network), "A fast network is required. Call MDN.convertToFast() first."
         if isinstance(self.module, _PeriodicMixtureDensityNetwork):
             CMDNTrainer = FastPeriodicMDNTrainer
@@ -160,12 +161,16 @@ class MDNTrainer(SCGTrainer):
             if validation_set==None:
                 self._cmdntrainer = CMDNTrainer(self.module.proxies.map[self.module], 
                                                 self.ds.getFastDataset(),
-                                                use_cg)
+                                                use_cg,
+                                                batch_size,
+                                                batch_epochs)
             else:
                 self._cmdntrainer = CMDNTrainer(self.module.proxies.map[self.module], 
                                                 self.ds.getFastDataset(),
                                                 validation_set.getFastDataset(),
-                                                use_cg)
+                                                use_cg,
+                                                batch_size,
+                                                batch_epochs)
         return self._cmdntrainer
 
 #    @staticmethod
