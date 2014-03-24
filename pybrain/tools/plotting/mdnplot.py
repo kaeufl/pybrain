@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import mpl
 from scipy.stats import cumfreq
+from scipy.special import erf
 from pybrain.auxiliary import mdn
 from pybrain.structure.networks.mdn import PeriodicMixtureDensityNetwork
 #from nnutil.preprocessing import center, standardize, whiten
@@ -428,7 +429,35 @@ class MDNPlotter():
             m = self.invTransform(m, transform)
             #m=self.ds.tgt_transform['scale']*m + self.ds.tgt_transform['mean']
         return m
-
+    
+    def _getTargetRange(self, prior_range=None, res=100):
+        if prior_range is not None:
+            t0 = prior_range[0]
+            t1 = prior_range[1]
+        else:
+            assert len(self.ds) > 100, "Dataset too small to estimate target range"
+            t0 = np.min(self.ds.getField('target'))
+            t1 = np.max(self.ds.getField('target'))
+        return np.linspace(t0, t1, res)
+    
+    def getCDF(self, sample=None, res=100, prior_range=None):
+        if sample is not None:
+            y = self.module.activate(self.ds.getSample(sample)[0])[None,:]
+        else:
+            y = self.module.activateOnDataset(self.ds)
+        alpha, sigma2, mu = self.module.getMixtureParams(y)
+        assert mu.shape[-1] == 1, "Multi-dimensional mdns not supported yet"
+        cdf = np.zeros((len(y), res))
+        t = self._getTargetRange(prior_range, res)
+        for m in range(self.module.M):
+            x = (t[None,:]-mu[:,m,0][:,None])/np.sqrt(2*sigma2[:,m][:,None])
+            cdf += alpha[:,m][:,None]*0.5*(1+erf(x))
+        return t, cdf
+    
+    def getQuantiles(self, sample=None, quantiles=[0.1,0.5,0.9], res=100,
+                     prior_range=None):
+        t,cdf = self.getCDF(sample, res, prior_range)
+        return tuple([t[np.argmax(cdf>p, axis=1)] for p in quantiles])
     
     def getMode(self, sample=None, res=100, transform=False, sigma_level=0,
                 prior_range=None):
@@ -440,15 +469,7 @@ class MDNPlotter():
 
         The mode is determined numerically using a grid with 'res' points.
         """
-        if prior_range is not None:
-            t0 = prior_range[0]
-            t1 = prior_range[1]
-        else:
-            assert len(self.ds) > 100, "Dataset too small to estimate target range"
-            t0 = np.min(self.ds.getField('target'))
-            t1 = np.max(self.ds.getField('target'))
-         
-        t = np.linspace(t0, t1, res)
+        t = self._getTargetRange(prior_range, res)
         if sample is None:
             p = self.getPosterior(self.ds.getField('input'), t)
         else:
