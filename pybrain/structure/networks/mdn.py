@@ -173,6 +173,11 @@ class PeriodicMixtureDensityNetwork(MixtureDensityNetwork):
     hist_errors = list()
     hist_deriv = list()
     
+    def __init__(self, M, c, nperiods, *args, **kwargs):
+        MixtureDensityNetwork.__init__(self, M, c, *args, **kwargs)
+        self.nperiods = nperiods
+        self.argdict['nperiods'] = nperiods
+    
     def _p(self, t, alpha, mu, sigma):
         assert t.ndim == 3, "shape of t must be (N, nt, dy)"
         assert alpha.ndim == 2, "shape of alpha must be (N, M)" 
@@ -235,7 +240,7 @@ class PeriodicMixtureDensityNetwork(MixtureDensityNetwork):
             print "No fast networks available."
             return None
         net = self.copy()
-        cnet = _PeriodicMixtureDensityNetwork(self.M, self.c)
+        cnet = _PeriodicMixtureDensityNetwork(self.M, self.c, self.nperiods)
         self._transferNetStructure(net, cnet)
         cnet.owner = cnet
         return cnet
@@ -243,13 +248,13 @@ class PeriodicMixtureDensityNetwork(MixtureDensityNetwork):
     def convertToPythonNetwork(self):
         self.reset() # avoid a memory leak?
         cnet = self.copy()
-        net = PeriodicMixtureDensityNetwork(self.M, self.c)
+        net = PeriodicMixtureDensityNetwork(self.M, self.c, self.nperiods)
         self._transferNetStructure(cnet, net)
         net.owner = net
         return net
 
 def buildMixtureDensityNetwork(di, H, dy, M, fast = False, periodic = False,
-                               in_ranges=None, out_ranges=None):
+                               in_ranges=None, out_ranges=None, nperiods=7):
     """
     Construct a Mixture density network. If in_ranges and out_ranges are given a 
     partially connected first layer is created with the given input and output ranges. 
@@ -257,7 +262,7 @@ def buildMixtureDensityNetwork(di, H, dy, M, fast = False, periodic = False,
     if type(H) == int:
         H = [H]
     if periodic:
-        net = PeriodicMixtureDensityNetwork(M, dy)
+        net = PeriodicMixtureDensityNetwork(M, dy, nperiods)
     else:
         net = MixtureDensityNetwork(M, dy)
     dy = (2+dy)*M

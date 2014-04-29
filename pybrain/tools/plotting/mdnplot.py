@@ -239,10 +239,11 @@ class MDNPlotter():
                      markeredgewidth=1)
         return p.T
     
-    def plotInformationGainDistribution(self, color='k', nbins=500):
+    def plotInformationGainDistribution(self, color='k', nbins=50):
         dkl = self.getInformationGain(nbins=nbins)
-        plt.hist(dkl, 50, color=color)
+        plt.hist(dkl, nbins, color=color)
         plt.xlabel('nats')
+        return dkl
 
 #    def getPosterior(self, x, t):
 #        if self.p == None:
@@ -440,18 +441,22 @@ class MDNPlotter():
             t1 = np.max(self.ds.getField('target'))
         return np.linspace(t0, t1, res)
     
+    def _getCDF(self, t, alpha, sigma2, mu, res=100):
+        assert mu.shape[-1] == 1, "Multi-dimensional mdns not supported yet"
+        cdf = np.zeros((len(alpha), res))
+        for m in range(self.module.M):
+            x = (t[None,:]-mu[:,m,0][:,None])/np.sqrt(2*sigma2[:,m][:,None])
+            cdf += alpha[:,m][:,None]*0.5*(1+erf(x))
+        return cdf
+    
     def getCDF(self, sample=None, res=100, prior_range=None):
         if sample is not None:
             y = self.module.activate(self.ds.getSample(sample)[0])[None,:]
         else:
             y = self.module.activateOnDataset(self.ds)
         alpha, sigma2, mu = self.module.getMixtureParams(y)
-        assert mu.shape[-1] == 1, "Multi-dimensional mdns not supported yet"
-        cdf = np.zeros((len(y), res))
         t = self._getTargetRange(prior_range, res)
-        for m in range(self.module.M):
-            x = (t[None,:]-mu[:,m,0][:,None])/np.sqrt(2*sigma2[:,m][:,None])
-            cdf += alpha[:,m][:,None]*0.5*(1+erf(x))
+        cdf = self._getCDF(t, alpha, sigma2, mu, res)
         return t, cdf
     
     def getQuantiles(self, sample=None, quantiles=[0.1,0.5,0.9], res=100,
@@ -476,7 +481,6 @@ class MDNPlotter():
             p = self.getPosterior(self.ds.getSample(sample)[0], t)
         m = self._getMode(t, p, res, transform, sigma_level)
         return m
-        
     
     def getMaxKernel(self, alpha, sigma):
         """
@@ -551,3 +555,16 @@ class MDNPlotter():
                                posterior * np.log(posterior/(prior+eps)) * dt, 
                                0), 
                       axis=1)
+    
+    def getRenyiDivergence(self, sample=None, nbins=500):
+        """
+        Estimate the Renyi divergence between prior and posterior distribution.
+        """
+        eps = np.finfo('float').eps
+        prior, t = np.histogram(self.tgts, nbins, density=True)
+        dt = np.abs(t[1]-t[0])
+        if sample==None:
+            posterior = self.getPosterior(self.ds.getField('input'), t)[:,:-1]
+        else:
+            posterior = self.getPosterior(self.ds.getField('input')[sample], t)[None, :-1]        
+        return np.log(np.sum(np.where(prior > eps, posterior**2 / prior, 0), axis=1))
