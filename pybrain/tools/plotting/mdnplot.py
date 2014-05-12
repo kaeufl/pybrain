@@ -269,7 +269,7 @@ class MDNPlotter():
     
     def plotCenters(self, center = None, transform = None, interactive=False,
                     colors=None, size=20, plot_all_centers=False, square=False,
-                    rasterized=False, minimum_gain=None, show_colorbar=False,
+                    rasterized=True, minimum_gain=None, show_colorbar=False,
                     edgecolor='none', mode_res=300, gain_nbins=500):
         """
         Plot target value vs. predicted posterior mode.
