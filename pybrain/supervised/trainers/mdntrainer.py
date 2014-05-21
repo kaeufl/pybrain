@@ -102,8 +102,7 @@ class MDNTrainer(SCGTrainer):
         print sigma
         print "Centers:"
         print centroid
-        
-        conn_b_o.params[:] = np.reshape([alpha, np.log(sigma), centroid], 
+        conn_b_o.params[:] = np.reshape([alpha, np.log(sigma), centroid.flatten()], 
                                         conn_b_o.params.shape)
 
     def setData(self, dataset):
