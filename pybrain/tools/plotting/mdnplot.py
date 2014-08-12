@@ -53,7 +53,8 @@ class MDNPlotter():
                       label = None):
         if t.ndim == 1:
             t = t[:, None]
-        p = self.module.getPosterior(x, t)[0]
+        t_untransformed = t.copy()
+        p = self.module.getPosterior(x, t_untransformed)[0]
 
         if transform:
             Dt0 = np.max(t) - np.min(t)
@@ -64,8 +65,9 @@ class MDNPlotter():
         if plot_individual_kernels:
             y = self.module.activate(x)
             alpha, sigma, mu = self.module.getMixtureParams(y)
-            for a,s,m in zip(alpha, sigma, mu):
-                pk =  a*self.module._phi(t, m[None,None], s[None,None])
+            for a,s,m in zip(alpha[0], sigma[0], mu[0]):
+                pk =  self.module._phi(t_untransformed, m[None,None], s[None,None])
+                pk /= (np.max(t) - np.min(t))/Dt0
                 plt.plot(t, pk[0,:,0], '--')
         if target:
             if transform:
@@ -239,9 +241,9 @@ class MDNPlotter():
                      markeredgewidth=1)
         return p.T
     
-    def plotInformationGainDistribution(self, color='k', nbins=50):
+    def plotInformationGainDistribution(self, color='k', nbins=50, range=None, normed=False):
         dkl = self.getInformationGain(nbins=nbins)
-        plt.hist(dkl, nbins, color=color)
+        plt.hist(dkl, nbins, color=color, range=range, normed=normed)
         plt.xlabel('nats')
         return dkl
 
@@ -441,9 +443,9 @@ class MDNPlotter():
             t1 = np.max(self.ds.getField('target'))
         return np.linspace(t0, t1, res)
     
-    def _getCDF(self, t, alpha, sigma2, mu, res=100):
+    def _getCDF(self, t, alpha, sigma2, mu):
         assert mu.shape[-1] == 1, "Multi-dimensional mdns not supported yet"
-        cdf = np.zeros((len(alpha), res))
+        cdf = np.zeros((len(alpha), len(t)))
         for m in range(self.module.M):
             x = (t[None,:]-mu[:,m,0][:,None])/np.sqrt(2*sigma2[:,m][:,None])
             cdf += alpha[:,m][:,None]*0.5*(1+erf(x))
@@ -456,7 +458,7 @@ class MDNPlotter():
             y = self.module.activateOnDataset(self.ds)
         alpha, sigma2, mu = self.module.getMixtureParams(y)
         t = self._getTargetRange(prior_range, res)
-        cdf = self._getCDF(t, alpha, sigma2, mu, res)
+        cdf = self._getCDF(t, alpha, sigma2, mu)
         return t, cdf
     
     def getQuantiles(self, sample=None, quantiles=[0.1,0.5,0.9], res=100,
