@@ -464,7 +464,20 @@ class MDNPlotter():
     def getQuantiles(self, sample=None, quantiles=[0.1,0.5,0.9], res=100,
                      prior_range=None):
         t,cdf = self.getCDF(sample, res, prior_range)
-        return tuple([t[np.argmax(cdf>p, axis=1)] for p in quantiles])
+        x_values = []
+        for p in quantiles:
+            outside_range_idxs = np.where(np.all(cdf<p, axis=-1))[0]
+            cdf[outside_range_idxs,-1] = 1.0
+            if len(outside_range_idxs):
+                # there is probability missing, potentially due to the posterior
+                # having probability mass outside the parameter range, in this case, 
+                # we place the quantile at the boundary of the prior range
+                print ("Warning: The requested probability level %.2f is not " +
+                      "taken within the parameter range for %i samples.") %\
+                       (p, len(outside_range_idxs))
+            q = t[np.argmax(cdf>p, axis=1)]
+            x_values.append(q)
+        return tuple(x_values)
     
     def getMode(self, sample=None, res=100, transform=False, sigma_level=0,
                 prior_range=None):
