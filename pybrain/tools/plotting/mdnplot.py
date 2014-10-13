@@ -241,8 +241,12 @@ class MDNPlotter():
                      markeredgewidth=1)
         return p.T
     
-    def plotInformationGainDistribution(self, color='k', nbins=50, range=None, normed=False):
-        dkl = self.getInformationGain(nbins=nbins)
+    def plotInformationGainDistribution(self, color='k', nbins=50, range=None, 
+                                        normed=False, samples=None,
+                                        renormalize=False):
+        dkl = self.getInformationGain(nbins=nbins, renormalize=renormalize)
+        if samples is not None:
+            dkl = dkl[samples]
         plt.hist(dkl, nbins, color=color, range=range, normed=normed)
         plt.xlabel('nats')
         return dkl
@@ -272,7 +276,8 @@ class MDNPlotter():
     def plotCenters(self, center = None, transform = None, interactive=False,
                     colors=None, size=20, plot_all_centers=False, square=False,
                     rasterized=True, minimum_gain=None, show_colorbar=False,
-                    edgecolor='none', mode_res=300, gain_nbins=500):
+                    edgecolor='none', mode_res=300, gain_nbins=500,
+                    samples=None):
         """
         Plot target value vs. predicted posterior mode.
         @param center:           use the position of the specified kernel, 
@@ -290,11 +295,15 @@ class MDNPlotter():
         @param size:             size of the dots in scatter plot
         @param minimum_gain:     Discard patterns with an information gain below threshold.
         @param mode_res:         number of points to be used for mode finding
+        @param samples:          Only plot the samples with the given ids. Can be used
+                                 to select only a certain fraction of the dataset for plotting.
         """
         if self.y == None:
             self.update()
         tgts = self.tgts
-        if center=='max' or center=='all' or minimum_gain or colors=='alpha' or type(center)==int:
+        alpha = None
+        sigma = None
+        if center=='max' or center=='all' or minimum_gain or (type(colors)==str and colors=='alpha') or type(center)==int:
             alpha, sigma, mu = mdn.getMixtureParams(self.y, self.module.M, self.module.c)
             if isinstance(self.module, PeriodicMixtureDensityNetwork):
                 while np.any(mu > np.max(tgts)):
@@ -323,7 +332,15 @@ class MDNPlotter():
             mu = mu[idxs]
             tgts = tgts[idxs]
             dKL = dKL[idxs]
-        
+        elif samples is not None:
+            if alpha is not None:
+                alpha = alpha[samples]
+            if sigma is not None:
+                sigma = sigma[samples]
+            mu = mu[samples]
+            tgts = tgts[samples]
+            if dKL is not None:
+                dKL = dKL[samples]
         if center=='all':
             cmap = mpl.colors.LinearSegmentedColormap.from_list('tmp', 
                                                                 [[0.8,.8,.8],[0,0,0]])
@@ -337,7 +354,7 @@ class MDNPlotter():
                             rasterized=rasterized
                             )
 
-        elif colors=='alpha':
+        elif type(colors)==str and colors=='alpha':
             cmap = mpl.colors.LinearSegmentedColormap.from_list('tmp', 
                                                                 [[1.,1.,1.],[0,0,0]])
             colors=alpha[np.arange(0,len(mu)), maxidxs]
@@ -345,7 +362,7 @@ class MDNPlotter():
                         cmap=cmap, edgecolor=edgecolor,
                         rasterized=rasterized
             )
-        elif colors=='gain':
+        elif type(colors)==str and colors=='gain':
             cmap = mpl.colors.LinearSegmentedColormap.from_list('tmp', 
                                                                 [[.8,.8,.8],[0,0,0]])
             #cmap = 'jet'
@@ -382,7 +399,7 @@ class MDNPlotter():
         else:
             xlims=ylims
         plt.xlim(xlims)
-        return mu, self.tgts
+        return mu, tgts
     
     @staticmethod
     def scatterPick(event):
@@ -553,7 +570,7 @@ class MDNPlotter():
         f=plt.gcf()
         f.canvas.mpl_connect('pick_event', updatePlot)
 
-    def getInformationGain(self, sample=None, nbins=500):
+    def getInformationGain(self, sample=None, nbins=500, renormalize=False):
         """
         Estimate the information gain for every pattern in the dataset. The
         information gain is defined as the Kullback-Leibler divergence between
@@ -565,7 +582,9 @@ class MDNPlotter():
         if sample==None:
             posterior = self.getPosterior(self.ds.getField('input'), t)[:,:-1]
         else:
-            posterior = self.getPosterior(self.ds.getField('input')[sample], t)[None, :-1]        
+            posterior = self.getPosterior(self.ds.getField('input')[sample], t)[None, :-1]
+        if renormalize:
+            posterior /= np.sum(posterior*dt, axis=-1)[:,None]
         return np.sum(np.where(prior > eps, 
                                posterior * np.log(posterior/(prior+eps)) * dt, 
                                0), 
