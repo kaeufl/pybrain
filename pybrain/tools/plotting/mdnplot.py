@@ -55,9 +55,8 @@ class MDNPlotter():
             t = t[:, None]
         t_untransformed = t.copy()
         p = self.module.getPosterior(x, t_untransformed)[0]
-
+        Dt0 = np.max(t) - np.min(t)
         if transform:
-            Dt0 = np.max(t) - np.min(t)
             t = self.invTransform(t, transform)
             p /= (np.max(t) - np.min(t))/Dt0
         plt.plot(t, p, linestyle, color=color, linewidth=linewidth, label=label)
@@ -72,7 +71,7 @@ class MDNPlotter():
         if target:
             if transform:
                 target = self.invTransform(target, transform)
-            plt.axvline(target, linewidth=linewidth, zorder=10)
+            plt.axvline(target, linewidth=linewidth, zorder=10, color=color)
         return p
 
 #    def plot1DMixtureForSample(self, sample, transform=None,
@@ -122,14 +121,19 @@ class MDNPlotter():
                                res=300,
                                target_dist_line_style='g:',
                                target_dist_linewidth=0.5,
+                               target_dist_res=300,
                                show_target = True,
                                plot_individual_kernels=False,
                                label=None,
-                               with_confidence_intervals=False):
-        tgts = self.tgts
+                               with_confidence_intervals=False,
+                               confidence_interval_level=1,
+                               prior_samples=None,
+                               prior_function=None):
+        if prior_samples is None:
+            prior_samples = self.tgts
         if prior_range==None:
-            assert len(tgts) > 100, "Dataset too small to estimate target range"
-            prior_range=[np.min(tgts), np.max(tgts)]
+            assert len(prior_samples) > 100, "Dataset too small to estimate target range"
+            prior_range=[np.min(prior_samples), np.max(prior_samples)]
         if posterior_range is None:
             posterior_range = prior_range
         t = np.linspace(posterior_range[0], posterior_range[1], res)
@@ -147,13 +151,13 @@ class MDNPlotter():
                                label=label)
         if show_target_dist:
             if transform:
-                tgts = self.invTransform(tgts, transform)
-            [h, edges] = np.histogram(tgts, res, normed=True,
-                                      range=(np.min(tgts), np.max(tgts)))
+                prior_samples = self.invTransform(prior_samples, transform)
+            [h, edges] = np.histogram(prior_samples, target_dist_res, normed=True,
+                                      range=(np.min(prior_samples), np.max(prior_samples)))
             plt.plot(edges[1:], h, target_dist_line_style)
         if with_confidence_intervals:
             m0,m1,m2 = self.getMode(sample, res, bool(transform), 
-                                    sigma_level=1, 
+                                    sigma_level=confidence_interval_level, 
                                     prior_range=prior_range) 
             plt.axvline(m0, color='g', linestyle='--')
             plt.axvline(m1, color='g', linestyle='--')
@@ -165,6 +169,9 @@ class MDNPlotter():
             yprior = np.zeros(len(t))
             yprior[np.logical_and(t >= prior_range[0], t <= prior_range[1])] = 1./(prior_range[1]-prior_range[0])
             #plt.hlines(yprior, prior_range[0], prior_range[1], 'g', linewidth=linewidth)
+            plt.plot(t, yprior, 'g', linewidth=linewidth)
+        if prior_function is not None:
+            yprior = prior_function(t)
             plt.plot(t, yprior, 'g', linewidth=linewidth)
             
         plt.gca().set_xlim(t[0], t[-1])
@@ -277,7 +284,8 @@ class MDNPlotter():
                     colors=None, size=20, plot_all_centers=False, square=False,
                     rasterized=True, minimum_gain=None, show_colorbar=False,
                     edgecolor='none', mode_res=300, gain_nbins=500,
-                    samples=None):
+                    samples=None,
+                    show_diagonal=False):
         """
         Plot target value vs. predicted posterior mode.
         @param center:           use the position of the specified kernel, 
@@ -319,7 +327,9 @@ class MDNPlotter():
         elif center==None:
             mu = self.getMode(res = mode_res)        
         
-        if transform:
+        if transform is True:
+            transform = self.ds.tgt_transform
+        if transform is not None:
             mu = self.invTransform(mu, transform)
             tgts = self.invTransform(tgts, transform)
         
@@ -399,6 +409,10 @@ class MDNPlotter():
         else:
             xlims=ylims
         plt.xlim(xlims)
+        
+        if show_diagonal:
+            plt.plot([np.min(tgts), np.max(tgts)], [np.min(tgts), np.max(tgts)], 'k-', lw=2.0)
+        
         return mu, tgts
     
     @staticmethod
@@ -570,19 +584,28 @@ class MDNPlotter():
         f=plt.gcf()
         f.canvas.mpl_connect('pick_event', updatePlot)
 
-    def getInformationGain(self, sample=None, nbins=500, renormalize=False):
+    def getInformationGain(self, sample=None, nbins=500, renormalize=False, 
+                           uniform_prior_range=None,
+                           prior_samples=None):
         """
         Estimate the information gain for every pattern in the dataset. The
         information gain is defined as the Kullback-Leibler divergence between
         prior and posterior distribution.
         """
         eps = np.finfo('float').eps
-        prior, t = np.histogram(self.tgts, nbins, density=True)
+        if prior_samples is None:
+            prior_samples = self.tgts
+        if uniform_prior_range is None:
+            assert len(prior_samples) > 100, "Dataset too small to estimate target range"
+            prior, t = np.histogram(prior_samples, nbins, density=True)
+        else:
+            t = np.linspace(uniform_prior_range[0], uniform_prior_range[1], nbins+1)
+            prior = np.ones(len(t)-1) * 1.0/(uniform_prior_range[1]-uniform_prior_range[0])
         dt = np.abs(t[1]-t[0])
         if sample==None:
             posterior = self.getPosterior(self.ds.getField('input'), t)[:,:-1]
         else:
-            posterior = self.getPosterior(self.ds.getField('input')[sample], t)[None, :-1]
+            posterior = self.getPosterior(self.ds.getField('input')[sample], t)[:, :-1]
         if renormalize:
             posterior /= np.sum(posterior*dt, axis=-1)[:,None]
         return np.sum(np.where(prior > eps, 
