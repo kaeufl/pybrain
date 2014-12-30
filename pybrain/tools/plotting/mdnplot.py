@@ -250,11 +250,16 @@ class MDNPlotter():
     
     def plotInformationGainDistribution(self, color='k', nbins=50, range=None, 
                                         normed=False, samples=None,
-                                        renormalize=False):
+                                        renormalize=False,
+                                        alpha=1.0,
+                                        histtype='bar',
+                                        linestyle='solid'):
         dkl = self.getInformationGain(nbins=nbins, renormalize=renormalize)
         if samples is not None:
             dkl = dkl[samples]
-        plt.hist(dkl, nbins, color=color, range=range, normed=normed)
+        plt.hist(dkl, nbins, color=color, range=range, normed=normed, alpha=alpha, 
+                 histtype=histtype,
+                 linestyle=linestyle)
         plt.xlabel('nats')
         return dkl
 
@@ -285,7 +290,8 @@ class MDNPlotter():
                     rasterized=True, minimum_gain=None, show_colorbar=False,
                     edgecolor='none', mode_res=300, gain_nbins=500,
                     samples=None,
-                    show_diagonal=False):
+                    show_diagonal=False,
+                    diagonal_lw=2.0):
         """
         Plot target value vs. predicted posterior mode.
         @param center:           use the position of the specified kernel, 
@@ -377,7 +383,7 @@ class MDNPlotter():
                                                                 [[.8,.8,.8],[0,0,0]])
             #cmap = 'jet'
             if dKL is None:
-                dKL = self.getInformationGain(nbins=gain_nbins)
+                dKL = self.getInformationGain(nbins=gain_nbins)[samples]
             plt.scatter(mu, tgts, picker=interactive, c=dKL, s=size, 
                         cmap=cmap, edgecolor=edgecolor,
                         rasterized=rasterized
@@ -411,7 +417,7 @@ class MDNPlotter():
         plt.xlim(xlims)
         
         if show_diagonal:
-            plt.plot([np.min(tgts), np.max(tgts)], [np.min(tgts), np.max(tgts)], 'k-', lw=2.0)
+            plt.plot([np.min(tgts), np.max(tgts)], [np.min(tgts), np.max(tgts)], 'k-', lw=diagonal_lw)
         
         return mu, tgts
     
